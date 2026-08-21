@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en" data-vc-theme="paper" data-vc-texture="full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>VOIDCUT — VD0 Design System Specimen</title>
+  <link rel="stylesheet" href="./voidcut-design-system.css">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      background: var(--vc-bg);
+      color: var(--vc-bg-ink);
+      font-family: var(--vc-font-sans);
+      transition: background var(--vc-duration-nav) var(--vc-ease-ui), color var(--vc-duration-nav) var(--vc-ease-ui);
+    }
+    button, select { font: inherit; }
+    .spec { max-width: 1440px; margin: 0 auto; padding: clamp(20px,4vw,64px); }
+    .top { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; border-top:4px solid var(--vc-line-strong); padding-top:14px; }
+    .wordmark { font-size:clamp(44px,8vw,96px); line-height:.86; letter-spacing:-.075em; font-weight:700; }
+    .wordmark span { display:inline-block; transform:translateY(.03em); }
+    .cutmark { position:relative; }
+    .cutmark::after { content:""; position:absolute; left:47%; top:-8%; width:5px; height:116%; background:var(--vc-bg); transform:rotate(17deg); }
+    .meta { text-align:right; max-width:300px; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; margin-top:12px; }
+    .section { margin-top:clamp(48px,8vw,96px); }
+    .section-head { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:20px; border-bottom:2px solid var(--vc-line-strong); padding-bottom:10px; margin-bottom:24px; }
+    .label { font-size:12px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; }
+    .themes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+    .theme-card { min-height:150px; padding:14px; text-align:left; display:grid; grid-template-rows:1fr auto; cursor:pointer; }
+    .theme-card[aria-pressed="true"] { outline:4px solid var(--vc-focus); outline-offset:3px; }
+    .mini { position:relative; min-height:84px; overflow:hidden; background:var(--vc-bg-alt); border:1px solid var(--vc-line-strong); }
+    .mini-sheet { position:absolute; left:13%; top:16%; width:65%; height:62%; background:var(--vc-arena); border:2px solid var(--vc-arena-edge); box-shadow:4px 5px 0 color-mix(in srgb,var(--vc-shadow) 18%,transparent); clip-path:polygon(0 0,100% 0,87% 100%,8% 90%); }
+    .mini-cut { position:absolute; width:2px; height:92%; background:var(--vc-substrate); left:51%; top:4%; transform:rotate(31deg); transform-origin:center; }
+    .mini-dot { position:absolute; width:14px; height:14px; border-radius:50%; background:var(--vc-node-b); border:2px solid var(--vc-line-strong); left:30%; top:42%; }
+    .mini-block { position:absolute; right:6%; bottom:8%; width:24%; height:20%; background:var(--vc-accent); }
+    .theme-name { margin-top:12px; font-weight:700; letter-spacing:-.02em; }
+    .type-grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(220px,.6fr); gap:32px; }
+    .numbers { display:grid; gap:12px; align-content:start; }
+    .metric { border-top:1px solid var(--vc-line); padding-top:8px; display:grid; grid-template-columns:1fr auto; align-items:baseline; gap:16px; }
+    .metric strong { font-size:clamp(32px,5vw,64px); letter-spacing:-.055em; line-height:1; }
+    .playground { display:grid; grid-template-columns:minmax(0,1fr) minmax(260px,.42fr); gap:clamp(18px,4vw,48px); align-items:center; }
+    .field-wrap { position:relative; min-height:min(70vh,720px); background:var(--vc-substrate); overflow:hidden; border:1px solid var(--vc-line-strong); }
+    .field-bg-no { position:absolute; font-size:clamp(120px,23vw,360px); font-weight:700; line-height:.75; letter-spacing:-.09em; color:var(--vc-on-substrate); opacity:.08; right:-.05em; bottom:-.04em; }
+    .field { position:absolute; inset:10% 11% 12%; background:var(--vc-arena); border:2px solid var(--vc-arena-edge); box-shadow:0 7px 13px color-mix(in srgb,var(--vc-shadow) 25%,transparent); clip-path:polygon(5% 1%,95% 7%,100% 76%,72% 100%,10% 91%,0 31%); }
+    .field::after { content:""; position:absolute; inset:0; background-image:var(--vc-grain-image); opacity:var(--vc-grain-opacity); mix-blend-mode:multiply; pointer-events:none; }
+    .cut { position:absolute; left:38%; top:6%; width:5px; height:92%; background:var(--vc-substrate); transform:rotate(26deg); transform-origin:center; z-index:3; }
+    .anchor { position:absolute; z-index:4; width:10px; height:10px; background:var(--vc-line-strong); }
+    .anchor.a { left:30.5%; top:13%; }
+    .anchor.b { right:29%; bottom:14%; }
+    .disc { position:absolute; z-index:5; width:44px; height:44px; border-radius:50%; border:2px solid var(--vc-line-strong); display:grid; place-items:center; font-weight:700; box-shadow:2px 3px 0 color-mix(in srgb,var(--vc-shadow) 24%,transparent); }
+    .disc.a { left:25%; top:43%; background:var(--vc-node-b); color:var(--vc-on-accent); }
+    .disc.b { right:20%; top:27%; background:var(--vc-node-c); color:var(--vc-ink); }
+    .disc.c { right:28%; bottom:18%; background:var(--vc-node-a); color:var(--vc-on-substrate); }
+    .side { display:grid; gap:26px; }
+    .big-stat { border-top:4px solid var(--vc-line-strong); padding-top:10px; }
+    .big-stat .num { font-size:clamp(64px,10vw,132px); font-weight:700; letter-spacing:-.07em; line-height:.82; }
+    .buttons { display:grid; gap:10px; }
+    .icons { display:grid; grid-template-columns:repeat(8,1fr); gap:10px; }
+    .icon-cell { min-height:76px; display:grid; place-items:center; border:1px solid var(--vc-line); background:var(--vc-surface); color:var(--vc-ink); }
+    .status-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .status { padding:20px; min-height:118px; border:2px solid; }
+    .audit { font-family:var(--vc-font-mono); font-size:12px; white-space:pre-wrap; background:var(--vc-surface); color:var(--vc-ink); border:1px solid var(--vc-line-strong); padding:16px; }
+    @media (max-width:900px) {
+      .themes { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .type-grid,.playground { grid-template-columns:1fr; }
+      .field-wrap { min-height:min(72vh,620px); }
+      .icons { grid-template-columns:repeat(4,1fr); }
+    }
+    @media (max-width:560px) {
+      .top { display:grid; }
+      .meta { text-align:left; }
+      .controls { justify-content:flex-start; }
+      .themes { grid-template-columns:1fr; }
+      .status-grid { grid-template-columns:1fr; }
+      .field-wrap { min-height:520px; }
+      .disc { width:36px; height:36px; }
+    }
+  </style>
+</head>
+<body class="vc-ui vc-canvas">
+  <main class="spec">
+    <header class="top">
+      <div>
+        <div class="wordmark" aria-label="VOIDCUT"><span>VOID</span><span class="cutmark">CUT</span></div>
+        <p class="vc-body vc-secondary" style="max-width:620px;margin:18px 0 0">VD0 visual infrastructure specimen. Negative space, physical material, graphic hierarchy. No neon, glass, bloom, or sci-fi HUD language.</p>
+      </div>
+      <div class="meta">
+        <div class="vc-meta">Visual system / VD0</div>
+        <div class="vc-small vc-secondary" style="margin-top:6px">Foundation only — renderer ownership begins in VD1.</div>
+        <div class="controls">
+          <button class="vc-button" id="cycleTheme">Next theme</button>
+          <button class="vc-button vc-button--quiet" id="textureToggle">Texture: full</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="section">
+      <div class="section-head"><h2 class="vc-h2">Theme system</h2><span class="vc-meta">06 palettes</span></div>
+      <div class="themes" id="themes"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2 class="vc-h2">Typography</h2><span class="vc-meta">Scale / hierarchy</span></div>
+      <div class="type-grid">
+        <div>
+          <div class="vc-display">Cut space.<br>Keep what matters.</div>
+          <p class="vc-body-lg" style="max-width:680px;margin:28px 0 0">VOIDCUT uses a neutral grotesk and lets scale, mass, spacing, and negative space establish hierarchy. Tiny futuristic labels and decorative tracking are removed.</p>
+        </div>
+        <div class="numbers">
+          <div class="metric"><span class="vc-meta">Removed</span><strong class="vc-number">72%</strong></div>
+          <div class="metric"><span class="vc-meta">Stage</span><strong class="vc-number">06</strong></div>
+          <div class="metric"><span class="vc-meta">Cuts</span><strong class="vc-number">04</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2 class="vc-h2">Material field</h2><span class="vc-meta">VD1 target language</span></div>
+      <div class="playground">
+        <div class="field-wrap vc-grain">
+          <div class="field-bg-no">06</div>
+          <div class="field"></div>
+          <div class="cut"></div>
+          <div class="anchor a"></div><div class="anchor b"></div>
+          <div class="disc a">/</div><div class="disc b">×</div><div class="disc c">=</div>
+        </div>
+        <aside class="side">
+          <div class="big-stat"><div class="vc-meta">Removed</div><div class="num vc-number">72</div><div class="vc-h2">%</div></div>
+          <div><div class="vc-meta">Stage</div><div class="vc-h1 vc-number" style="margin-top:6px">06</div></div>
+          <div class="buttons"><button class="vc-button vc-button--primary">PLAY</button><button class="vc-button">DAILY</button><button class="vc-button vc-button--quiet">MASTERY</button></div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2 class="vc-h2">Status language</h2><span class="vc-meta">Pattern + color</span></div>
+      <div class="status-grid">
+        <div class="status vc-danger"><div class="vc-meta">Danger</div><h3 class="vc-h3" style="margin-top:28px">Cut crosses a node.</h3></div>
+        <div class="status vc-success"><div class="vc-meta">Clear</div><h3 class="vc-h3" style="margin-top:28px">Stage complete.</h3></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2 class="vc-h2">Icon grammar</h2><span class="vc-meta">2 px / square / miter</span></div>
+      <div class="icons" id="icons"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2 class="vc-h2">Runtime audit</h2><span class="vc-meta">Token + contrast gate</span></div>
+      <pre class="audit" id="audit"></pre>
+    </section>
+  </main>
+
+  <script src="./voidcut-design-system.js"></script>
+  <script>
+    const themesEl = document.getElementById('themes');
+    const auditEl = document.getElementById('audit');
+    const textureButton = document.getElementById('textureToggle');
+
+    function themeMini(theme) {
+      const button = document.createElement('button');
+      button.className = 'theme-card vc-object vc-grain';
+      button.type = 'button';
+      button.dataset.theme = theme.id;
+      button.innerHTML = `<div class="mini"><div class="mini-sheet"></div><div class="mini-cut"></div><div class="mini-dot"></div><div class="mini-block"></div></div><div><div class="theme-name">${theme.name}</div><div class="vc-small vc-secondary">${theme.description}</div></div>`;
+      button.addEventListener('click', () => VoidcutDesign.applyTheme(theme.id));
+      return button;
+    }
+
+    VoidcutDesign.themes.forEach(theme => themesEl.appendChild(themeMini(theme)));
+    VoidcutDesign.iconNames.forEach(name => {
+      const cell = document.createElement('div');
+      cell.className = 'icon-cell';
+      cell.title = name;
+      cell.appendChild(VoidcutDesign.createIcon(name, { title: name }));
+      document.getElementById('icons').appendChild(cell);
+    });
+
+    function refresh() {
+      document.querySelectorAll('.theme-card').forEach(card => card.setAttribute('aria-pressed', String(card.dataset.theme === VoidcutDesign.getTheme())));
+      textureButton.textContent = `Texture: ${VoidcutDesign.getTextureMode()}`;
+      auditEl.textContent = JSON.stringify(VoidcutDesign.audit(), null, 2);
+    }
+
+    document.getElementById('cycleTheme').addEventListener('click', () => VoidcutDesign.cycleTheme());
+    textureButton.addEventListener('click', () => {
+      const modes = ['full','reduced','off'];
+      const i = modes.indexOf(VoidcutDesign.getTextureMode());
+      VoidcutDesign.setTextureMode(modes[(i + 1) % modes.length]);
+    });
+    document.addEventListener('voidcut:themechange', refresh);
+    document.addEventListener('voidcut:texturechange', refresh);
+    refresh();
+  </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "id": "./",
+  "name": "VOIDCUT",
+  "short_name": "VOIDCUT",
+  "description": "A precision arcade game about cutting away space, protecting moving nodes, mastering stages, and racing deterministic runs.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "orientation": "any",
+  "background_color": "#E9E4D8",
+  "theme_color": "#E9E4D8",
+  "categories": ["games"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

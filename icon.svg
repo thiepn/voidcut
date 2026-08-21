@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">VOIDCUT</title>
+  <desc id="desc">A dark material field split by a pale physical cut with a coral disc.</desc>
+  <rect width="512" height="512" fill="#E9E4D8"/>
+  <rect x="72" y="72" width="368" height="368" fill="#171714"/>
+  <path d="M96 402 L402 96 L425 119 L119 425 Z" fill="#E9E4D8"/>
+  <path d="M90 402 L396 96" fill="none" stroke="#EF593D" stroke-width="7" stroke-linecap="square"/>
+  <circle cx="317" cy="194" r="38" fill="#EF593D"/>
+  <circle cx="317" cy="194" r="13" fill="#171714"/>
+</svg>
