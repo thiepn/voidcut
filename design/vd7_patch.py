@@ -166,8 +166,8 @@ if marker not in index:
     raise SystemExit('VD7 JS insertion marker missing')
 index = index.replace(marker, vd7_js + marker, 1)
 
-startup = 'rebuildRenderGeometry();viewportState=fitViewport();applyUiProductionPolish();renderToggles();applyAccessibilityClasses();renderCosmetics();showMenu();refreshInstall();refreshFullscreen();requestAnimationFrame(update);'
-startup_new = 'rebuildRenderGeometry();viewportState=fitViewport();applyUiProductionPolish();vd7Initialize();renderToggles();applyAccessibilityClasses();renderCosmetics();showMenu();refreshInstall();refreshFullscreen();requestAnimationFrame(update);'
+startup = 'rebuildRenderGeometry();viewportState=fitViewport();applyUiProductionPolish();renderToggles();applyAccessibilityClasses();vd6InitUtilityLayer();renderCosmetics();showMenu();refreshInstall();refreshFullscreen();requestAnimationFrame(update);'
+startup_new = 'rebuildRenderGeometry();viewportState=fitViewport();applyUiProductionPolish();vd7Initialize();renderToggles();applyAccessibilityClasses();vd6InitUtilityLayer();renderCosmetics();showMenu();refreshInstall();refreshFullscreen();requestAnimationFrame(update);'
 if startup not in index:
     raise SystemExit('VD7 startup marker missing')
 index = index.replace(startup, startup_new, 1)
