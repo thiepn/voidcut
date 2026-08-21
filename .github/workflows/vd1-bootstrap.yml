@@ -1,0 +1,84 @@
+name: VD1 renderer bootstrap
+
+on:
+  push:
+    branches:
+      - chatgpt/vd1-core-renderer-reconstruction
+    paths:
+      - .github/workflows/vd1-bootstrap.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-renderer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out VD1 branch
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt/vd1-core-renderer-reconstruction
+          fetch-depth: 0
+
+      - name: Apply VD1 renderer migration
+        run: python3 design/vd1_patch.py
+
+      - name: Validate integration contract
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          required = [
+              'voidcut-design-system.css',
+              'voidcut-design-system.js',
+              'name="voidcut-visual-phase" content="VD1"',
+              "const VD1_RENDERER_VERSION='VD1.0.0'",
+              "function drawCoreLightField(){return}",
+              "Object.defineProperty(window,'VoidcutRenderer'",
+          ]
+          missing = [token for token in required if token not in text]
+          if missing:
+              raise SystemExit('Missing VD1 integration tokens: ' + ', '.join(missing))
+          if text.count('// === VD1 CUTFORM CORE RENDERER') != 1:
+              raise SystemExit('VD1 renderer marker must occur exactly once')
+          for name, expected in {
+              'voidcut-build': '6.0.0',
+              'voidcut-save-schema': '16',
+              'voidcut-replay-version': '8',
+              'voidcut-arena-generation': '2',
+              'voidcut-director-generation': '6',
+              'voidcut-daily-generation': '1',
+          }.items():
+              m = re.search(rf'<meta name="{re.escape(name)}" content="([^"]+)"', text)
+              if not m or m.group(1) != expected:
+                  raise SystemExit(f'Release contract changed for {name}: {m.group(1) if m else "missing"}')
+
+          class Parser(HTMLParser):
+              pass
+          Parser().feed(text)
+
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, re.S | re.I)
+          inline = max(scripts, key=len)
+          Path('/tmp/voidcut-inline.js').write_text(inline, encoding='utf-8')
+          print('VD1 static contract PASS')
+          print('HTML bytes:', len(text.encode('utf-8')))
+          print('Inline JS bytes:', len(inline.encode('utf-8')))
+          PY
+          node --check /tmp/voidcut-inline.js
+
+      - name: Commit reconstructed renderer
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "index.html already contains VD1 renderer"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- index.html
+          git commit -m "VD1: reconstruct core canvas renderer"
+          git push origin HEAD:chatgpt/vd1-core-renderer-reconstruction
