@@ -20,7 +20,7 @@ async function inspectBoot(browserType, engine, url, viewport, label) {
   page.on('console', m => {
     if (m.type() !== 'error') return;
     const text = m.text();
-    if (engine === 'Firefox' && text.includes('Viewport argument key \"interactive-widget\" not recognized and ignored.')) {
+    if (engine === 'Firefox' && text.includes('interactive-widget') && text.includes('not recognized and ignored')) {
       results.push(`${engine} ${label} compatibility notice: interactive-widget ignored`);
       return;
     }
@@ -47,7 +47,10 @@ async function inspectBoot(browserType, engine, url, viewport, label) {
     if (audit.overflow) fail(label, 'horizontal overflow');
     if (!audit.cert.themeSuite) fail(label, 'theme-suite runtime audit failed');
     if (audit.cert.touchFailures?.length) fail(label, `undersized controls ${JSON.stringify(audit.cert.touchFailures.slice(0, 3))}`);
-    if (runtime.length) fail(label, runtime.join(' | '));
+    const actionableRuntime = runtime.filter(msg =>
+      !(engine === 'Firefox' && msg.includes('interactive-widget') && msg.includes('not recognized and ignored'))
+    );
+    if (actionableRuntime.length) fail(label, actionableRuntime.join(' | '));
     results.push(`${engine} ${label} PASS`);
   } catch (error) {
     fail(label, error.stack || String(error));
