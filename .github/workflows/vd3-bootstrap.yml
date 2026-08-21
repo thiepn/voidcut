@@ -21,7 +21,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply VD3 product shell migration
-        run: python3 design/vd3_patch.py
+        run: |
+          python3 design/vd3_patch.py
+          python3 design/vd3_review_patch.py
 
       - name: Validate VD3 contract
         run: |
@@ -41,15 +43,21 @@ jobs:
               'editorialResults:true',
               "const VD2_HUD_VERSION='VD2.0.0'",
               'drawCoreLightField(){return}',
+              '#menu.hidden{display:none!important}',
+              '@keyframes vd3ResultScore',
+              '#pauseBtn{',
           ]
           missing = [token for token in required if token not in text]
           if missing:
               raise SystemExit('Missing VD3 tokens: ' + ', '.join(missing))
           if text.count('/* === VD3 CUTFORM PRODUCT SHELL') != 1:
               raise SystemExit('VD3 CSS marker must occur exactly once')
+          if text.count('/* === VD3 REVIEW CORRECTIONS') != 1:
+              raise SystemExit('VD3 review marker must occur exactly once')
           if text.count('// === VD3 PRODUCT SHELL CONTRACT') != 1:
               raise SystemExit('VD3 JS marker must occur exactly once')
-          if 'hero-main-core' in text[text.index('<section id="menu"'):text.index('<section id="result"')]:
+          menu = text[text.index('<section id="menu"'):text.index('<section id="result"')]
+          if 'hero-main-core' in menu or 'heroGlow' in menu or 'heroCut' in menu:
               raise SystemExit('Legacy neon menu hero still present')
           if 'PRECISION <span>•</span> RISK <span>•</span> VOID' in text:
               raise SystemExit('Legacy menu language still present')
@@ -86,5 +94,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- index.html
-          git commit -m "VD3: reconstruct product shell"
+          git commit -m "VD3: finalize product shell"
           git push origin HEAD:chatgpt/vd3-product-shell-reconstruction
