@@ -33,7 +33,7 @@ jobs:
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
           sleep 1
-          cat > /tmp/v6-layout-check.mjs <<'JS'
+          cat > v6-layout-check.mjs <<'JS'
           import { chromium } from 'playwright';
           const browser=await chromium.launch({headless:true});
           const viewports=[
@@ -62,13 +62,12 @@ jobs:
               b.style.display='block';
               const r=b.getBoundingClientRect(),s=getComputedStyle(b),scale=canvas.width/720;
               const scoreSectionRight=canvas.left+258*scale;
-              const hudTop=canvas.top+42*scale;
               const bg=s.backgroundColor;
               const transparent=bg==='transparent'||bg==='rgba(0, 0, 0, 0)';
               return {
                 left:r.left,right:r.right,top:r.top,width:r.width,height:r.height,
-                wrapLeft:wrap.left,wrapTop:wrap.top,wrapCenter:wrap.left+wrap.width/2,
-                center:r.left+r.width/2,scoreSectionRight,hudTop,transparent,
+                wrapTop:wrap.top,wrapCenter:wrap.left+wrap.width/2,
+                center:r.left+r.width/2,scoreSectionRight,transparent,
                 border:parseFloat(s.borderTopWidth)||0,shadow:s.boxShadow
               };
             });
@@ -97,4 +96,5 @@ jobs:
           if(failures.length){for(const f of failures)console.error('- '+f);process.exit(1)}
           console.log('VOIDCUT V6 LAYOUT HOTFIX CERTIFICATION PASS');
           JS
-          node /tmp/v6-layout-check.mjs
+          node v6-layout-check.mjs
+          rm -f v6-layout-check.mjs
