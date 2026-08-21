@@ -21,7 +21,7 @@ replacements = {
     '--vc-ink-muted: #768077;': '--vc-ink-muted: #5B655D;',
     '--vc-ink-secondary: #745D6E;': '--vc-ink-secondary: #695269;',
     '--vc-ink-muted: #8E7688;': '--vc-ink-muted: #71576B;',
-    '--vc-on-accent: #FFF1E7;': '--vc-on-accent: #241620;',
+    '--vc-on-accent: #FFF1E7;': '--vc-on-accent: #23151F;',
 }
 for old, new in replacements.items():
     if old not in css:
