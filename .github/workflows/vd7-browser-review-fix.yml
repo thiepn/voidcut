@@ -1,0 +1,102 @@
+name: VD7 browser review corrections
+
+on:
+  push:
+    branches: [chatgpt/vd7-theme-responsive-certification]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-review:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/vd7-theme-responsive-certification
+          fetch-depth: 0
+      - name: Apply base VD7 migration
+        run: python3 design/vd7_patch.py
+      - name: Apply rendered-browser corrections
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          t=p.read_text(encoding='utf-8')
+          marker='/* === VD7 BROWSER REVIEW CORRECTIONS ==================================== */'
+          if marker in t:
+            print('VD7 browser review corrections already present')
+            raise SystemExit(0)
+          block=r'''
+
+/* === VD7 BROWSER REVIEW CORRECTIONS ==================================== */
+/* Chromium certification exposed legacy pseudo-elements beneath VD3–VD6.
+   This layer removes their direct cyan/magenta ownership and normalizes
+   measured interaction targets without changing component structure. */
+#menuSettingsFab{
+  width:48px!important;min-width:48px!important;height:48px!important;min-height:48px!important;
+  border-color:var(--vc-line-strong)!important;background:var(--vc-surface)!important;color:var(--vc-ink)!important;box-shadow:var(--vc-shadow-contact)!important;
+}
+#menu .menu-status-gem,#menu .best-badge-core{background:var(--vc-accent)!important;box-shadow:none!important}
+#menu .best-badge{background:var(--vc-surface)!important;border-color:var(--vc-line)!important;box-shadow:none!important}
+#menu .primary-icon{
+  background:color-mix(in srgb,var(--vc-accent) 9%,transparent)!important;
+  border-color:var(--vc-line)!important;
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--vc-accent) 18%,transparent)!important;
+  filter:none!important;
+}
+#daily::before{box-shadow:none!important;filter:none!important}
+#menu .menu-tile::after{background:linear-gradient(90deg,color-mix(in srgb,var(--vc-accent) 42%,transparent),transparent)!important;box-shadow:none!important}
+#menu .tile-icon{border-color:color-mix(in srgb,var(--vc-accent-alt) 18%,transparent)!important;box-shadow:none!important}
+#menu .tile-icon::before,#menu .tile-icon::after{box-shadow:none!important}
+
+.screen-hero::before{display:none!important;content:none!important;background:none!important;box-shadow:none!important;filter:none!important}
+.screen-nav .screen-back,.cos-back{min-height:46px!important;height:auto!important}
+#recordsPanel button,#competitionPanel button,#masteryPanel button,#cosmeticsPanel button,#settingsPanel button,#diagnosticsPanel button{min-height:44px!important}
+#recordsPanel summary,#competitionPanel summary,#masteryPanel summary,#cosmeticsPanel summary,#settingsPanel summary,#diagnosticsPanel summary{min-height:44px!important;display:flex!important;align-items:center!important}
+
+#recordsPanel .record-card::before,#recordsPanel .record-card.featured::before{background:var(--vc-accent)!important;box-shadow:none!important;filter:none!important}
+#recordsPanel .record-card.featured:nth-child(even)::before{background:var(--vc-accent-alt)!important}
+#competitionBoard::before{display:none!important;content:none!important;border:0!important;box-shadow:none!important}
+#masteryHero::after{border-color:var(--vc-line)!important;background:none!important;box-shadow:none!important}
+#masteryPanel .mastery-rank-emblem::before{background:transparent!important;border-color:var(--vc-line-strong)!important;box-shadow:none!important}
+
+#cosmeticsPanel .cos-top-tabs span.active::after{display:none!important;content:none!important;box-shadow:none!important}
+#cosHeroArt.cos-hero-art{background:var(--vc-bg-alt)!important;background-image:none!important;box-shadow:none!important}
+#cosmeticsPanel .cos-loadout-actions button{min-height:44px!important;height:auto!important}
+#cosmeticsPanel .cos-cat-tab{min-height:46px!important}
+
+#settingsPanel .settings-group::after{border-color:color-mix(in srgb,var(--vc-line) 70%,transparent)!important;background:none!important;box-shadow:none!important}
+#settingsPanel .toggle{min-height:44px!important;height:44px!important;border-color:var(--vc-line-strong)!important;box-shadow:none!important}
+#settingsPanel .toggle.is-on::before{background:var(--vc-accent)!important;box-shadow:none!important}
+#settingsPanel .toggle::after{box-shadow:none!important}
+
+.pause-shell::before{display:none!important;content:none!important;background:none!important;box-shadow:none!important;filter:none!important}
+#replayBadge{background:color-mix(in srgb,var(--vc-accent) 8%,var(--vc-surface))!important;border-color:var(--vc-line)!important;box-shadow:inset 0 0 0 1px var(--vc-line)!important}
+.vd6-replay-instrument .replay-highlights button,.vd6-replay-instrument .replay-controls button,.vd6-replay-instrument .replay-exit{min-height:46px!important;height:auto!important}
+
+/* Remaining ornamental layers may keep their geometry, never legacy glow. */
+#recordsPanel .record-card,#competitionPanel .competition-board,#masteryPanel .mastery-hero,#masteryPanel .mastery-card,#settingsPanel .settings-group,#diagnosticsPanel .vd6-report-sheet,.vd6-replay-instrument{filter:none!important}
+'''
+          t=t.replace('\n</style>',block+'\n</style>',1)
+          p.write_text(t,encoding='utf-8')
+          print('VD7 browser review corrections applied')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          h=Path('index.html').read_text(encoding='utf-8')
+          assert 'VD7 BROWSER REVIEW CORRECTIONS' in h
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',h,re.S|re.I)
+          Path('/tmp/vd7-review-inline.js').write_text(max(scripts,key=len),encoding='utf-8')
+          print('HTML bytes',len(h.encode()))
+          PY
+          node --check /tmp/vd7-review-inline.js
+      - name: Commit VD7 product layer
+        run: |
+          if git diff --quiet -- index.html design/voidcut-design-system.css; then echo "VD7 product layer already committed"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- index.html design/voidcut-design-system.css
+          git commit -m "VD7: apply browser certification corrections"
+          git push origin HEAD:chatgpt/vd7-theme-responsive-certification
