@@ -17,7 +17,15 @@ async function inspectBoot(browserType, engine, url, viewport, label) {
   const page = await context.newPage();
   const runtime = [];
   page.on('pageerror', e => runtime.push(`pageerror ${e.message}`));
-  page.on('console', m => { if (m.type() === 'error') runtime.push(`console ${m.text()}`); });
+  page.on('console', m => {
+    if (m.type() !== 'error') return;
+    const text = m.text();
+    if (engine === 'Firefox' && text.includes('Viewport argument key \"interactive-widget\" not recognized and ignored.')) {
+      results.push(`${engine} ${label} compatibility notice: interactive-widget ignored`);
+      return;
+    }
+    runtime.push(`console ${text}`);
+  });
   page.on('requestfailed', r => runtime.push(`requestfailed ${r.url()} ${r.failure()?.errorText || ''}`));
   page.on('response', r => {
     if (r.url().startsWith(new URL(url).origin) && r.status() >= 400) runtime.push(`http ${r.status()} ${r.url()}`);
