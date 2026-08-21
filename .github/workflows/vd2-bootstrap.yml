@@ -1,6 +1,9 @@
 name: VD2 HUD bootstrap
 
 on:
+  push:
+    branches:
+      - chatgpt/vd2-gameplay-hud-reconstruction
   pull_request:
     branches:
       - chatgpt/vd1-core-renderer-reconstruction
@@ -23,6 +26,24 @@ jobs:
       - name: Apply VD2 HUD migration
         run: python3 design/vd2_patch.py
 
+      - name: Correct field-clear ruler scale
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          text=p.read_text(encoding='utf-8')
+          old='ratio=Math.max(0,Math.min(1,cleared/target))'
+          new='ratio=Math.max(0,Math.min(1,cleared/100))'
+          if old in text:
+              text=text.replace(old,new,1)
+              p.write_text(text,encoding='utf-8')
+              print('Corrected clear ruler to 0-100 field scale.')
+          elif new in text:
+              print('Clear ruler already uses 0-100 field scale.')
+          else:
+              raise SystemExit('Expected VD2 clear-ruler expression not found')
+          PY
+
       - name: Validate VD2 contract
         run: |
           python3 - <<'PY'
@@ -40,6 +61,7 @@ jobs:
               "canvasCompetitiveStatus:true",
               "function drawTutorialHud()",
               "function vd2CutStatus()",
+              "ratio=Math.max(0,Math.min(1,cleared/100))",
           ]
           missing = [token for token in required if token not in text]
           if missing:
@@ -77,11 +99,11 @@ jobs:
       - name: Commit reconstructed HUD
         run: |
           if git diff --quiet -- index.html; then
-            echo "index.html already contains VD2 HUD"
+            echo "index.html already contains validated VD2 HUD"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- index.html
-          git commit -m "VD2: reconstruct gameplay HUD"
+          git commit -m "VD2: finalize gameplay HUD"
           git push origin HEAD:chatgpt/vd2-gameplay-hud-reconstruction
