@@ -1,0 +1,104 @@
+name: VD6 system utility reconstruction
+
+on:
+  pull_request:
+    branches:
+      - chatgpt/vd5-cosmetics-reconstruction
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reconstruct-utilities:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out VD6 branch
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt/vd6-system-utility-reconstruction
+          fetch-depth: 0
+
+      - name: Apply VD6 system utility migration
+        run: python3 design/vd6_patch.py
+
+      - name: Validate VD6 contract
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+
+          text=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'name="voidcut-visual-phase" content="VD6"',
+            '/* === VD6 SYSTEM + UTILITY RECONSTRUCTION',
+            "const VD6_SYSTEM_VERSION='VD6.0.0'",
+            "Object.defineProperty(window,'VoidcutUtilities'",
+            "arcade:'paper'", "sunset:'carbon'", "ion:'cobalt'",
+            "ice:'kelp'", "vector:'plum'", "spectrum:'mono'",
+            'id="textureMode"', 'vd6-replay-instrument', 'vd6-report-sheet',
+            "const VD5_COSMETICS_VERSION='VD5.0.0'",
+            "const VD4_SECONDARY_VERSION='VD4.0.0'",
+            "const VD3_SHELL_VERSION='VD3.0.0'",
+            "const VD2_HUD_VERSION='VD2.0.0'",
+            'drawCoreLightField(){return}',
+          ]
+          missing=[x for x in required if x not in text]
+          if missing: raise SystemExit('Missing VD6 tokens: '+', '.join(missing))
+          if text.count('/* === VD6 SYSTEM + UTILITY RECONSTRUCTION') != 1: raise SystemExit('VD6 CSS marker must occur exactly once')
+          if text.count('// === VD6 SYSTEM + UTILITY CONTRACT') != 1: raise SystemExit('VD6 JS marker must occur exactly once')
+
+          settings_start=text.index('<section id="settingsPanel"')
+          diag_start=text.index('<section id="diagnosticsPanel"',settings_start)
+          end=text.index('</div>\n<div id="orientationNotice"',diag_start)
+          settings=text[settings_start:diag_start]
+          diagnostics=text[diag_start:end]
+          replay_start=text.index('<div id="replayHud"')
+          cosmetics_start=text.index('<section id="cosmeticsPanel"',replay_start)
+          replay=text[replay_start:cosmetics_start]
+
+          for legacy in ['Global neon color scheme','settings-mark','screen-mark settings-mark']:
+            if legacy in settings: raise SystemExit('Legacy Settings token remains: '+legacy)
+          for token in ['>THEME<','>TEXTURE<','id="colorPalette"','id="textureMode"','data-setting="sound"','data-setting="music"','data-setting="haptics"','id="swipeSensitivity"','data-setting="trails"','data-setting="largeUI"','data-setting="reducedMotion"','data-setting="highContrast"','id="powerMode"','id="fullscreenMode"','id="replayTutorial"','id="systemChecks"','id="settingsBack"']:
+            if token not in settings: raise SystemExit('Settings control missing: '+token)
+          for legacy in ['diagnostics-mark','screen-mark diagnostics-mark']:
+            if legacy in diagnostics: raise SystemExit('Legacy Diagnostics token remains: '+legacy)
+          for token in ['id="diagnosticsText"','id="runDiagnostics"','id="copyDiagnostics"','id="runStressDiagnostics"','id="resetMetrics"','id="exportSave"','id="importSave"','id="diagnosticsBack"']:
+            if token not in diagnostics: raise SystemExit('Diagnostics control missing: '+token)
+          for token in ['id="replayBadge"','id="replayBiggest"','id="replayClosest"','id="replayDeath"','id="replayCutInfo"','id="markerBiggest"','id="markerClosest"','id="markerDeath"','id="replayTimeline"','id="replayTimeNow"','id="replayTimeTotal"','id="replayPrev"','id="replayPause"','id="replaySpeed"','id="replayNext"','id="replayExit"']:
+            if token not in replay: raise SystemExit('Replay control missing: '+token)
+
+          # Stable palette IDs must remain for save compatibility and Mastery gates.
+          for token in ["arcade:{", "sunset:{", "ion:{", "ice:{", "vector:{", "spectrum:{", "availablePaletteIds(s)"]:
+            if token not in text: raise SystemExit('Legacy saved palette compatibility missing: '+token)
+
+          for name,expected in {
+            'voidcut-build':'6.0.0','voidcut-save-schema':'16','voidcut-replay-version':'8',
+            'voidcut-arena-generation':'2','voidcut-director-generation':'6','voidcut-daily-generation':'1'
+          }.items():
+            m=re.search(rf'<meta name="{re.escape(name)}" content="([^"]+)"',text)
+            if not m or m.group(1)!=expected: raise SystemExit(f'Contract changed: {name}')
+
+          HTMLParser().feed(text)
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',text,re.S|re.I)
+          inline=max(scripts,key=len)
+          Path('/tmp/voidcut-inline.js').write_text(inline,encoding='utf-8')
+          print('VD6 static contract PASS')
+          print('HTML bytes:',len(text.encode('utf-8')))
+          print('Inline JS bytes:',len(inline.encode('utf-8')))
+          PY
+          node --check /tmp/voidcut-inline.js
+
+      - name: Commit reconstructed utilities
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "index.html already contains VD6"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- index.html
+          git commit -m "VD6: reconstruct system utility layer"
+          git push origin HEAD:chatgpt/vd6-system-utility-reconstruction
