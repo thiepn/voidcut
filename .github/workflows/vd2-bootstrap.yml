@@ -1,0 +1,87 @@
+name: VD2 HUD bootstrap
+
+on:
+  pull_request:
+    branches:
+      - chatgpt/vd1-core-renderer-reconstruction
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-hud:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out VD2 branch
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt/vd2-gameplay-hud-reconstruction
+          fetch-depth: 0
+
+      - name: Apply VD2 HUD migration
+        run: python3 design/vd2_patch.py
+
+      - name: Validate VD2 contract
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+
+          text = Path('index.html').read_text(encoding='utf-8')
+          required = [
+              'name="voidcut-visual-phase" content="VD2"',
+              "const VD2_HUD_VERSION='VD2.0.0'",
+              "Object.defineProperty(window,'VoidcutHUD'",
+              "flatPanels:true",
+              "neonHud:false",
+              "canvasCompetitiveStatus:true",
+              "function drawTutorialHud()",
+              "function vd2CutStatus()",
+          ]
+          missing = [token for token in required if token not in text]
+          if missing:
+              raise SystemExit('Missing VD2 tokens: ' + ', '.join(missing))
+          if text.count('// === VD2 CUTFORM GAMEPLAY HUD') != 1:
+              raise SystemExit('VD2 HUD marker must occur exactly once')
+          for name, expected in {
+              'voidcut-build': '6.0.0',
+              'voidcut-save-schema': '16',
+              'voidcut-replay-version': '8',
+              'voidcut-arena-generation': '2',
+              'voidcut-director-generation': '6',
+              'voidcut-daily-generation': '1',
+          }.items():
+              m = re.search(rf'<meta name="{re.escape(name)}" content="([^"]+)"', text)
+              if not m or m.group(1) != expected:
+                  raise SystemExit(f'Release contract changed for {name}: {m.group(1) if m else "missing"}')
+          if "ui.challengeHud.classList.add('hidden')" not in text:
+              raise SystemExit('Legacy DOM challenge HUD is still active')
+          if 'drawCoreLightField(){return}' not in text:
+              raise SystemExit('VD1 renderer invariant was lost')
+
+          class Parser(HTMLParser):
+              pass
+          Parser().feed(text)
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, re.S | re.I)
+          inline = max(scripts, key=len)
+          Path('/tmp/voidcut-inline.js').write_text(inline, encoding='utf-8')
+          print('VD2 static contract PASS')
+          print('HTML bytes:', len(text.encode('utf-8')))
+          print('Inline JS bytes:', len(inline.encode('utf-8')))
+          PY
+          node --check /tmp/voidcut-inline.js
+
+      - name: Commit reconstructed HUD
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "index.html already contains VD2 HUD"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- index.html
+          git commit -m "VD2: reconstruct gameplay HUD"
+          git push origin HEAD:chatgpt/vd2-gameplay-hud-reconstruction
