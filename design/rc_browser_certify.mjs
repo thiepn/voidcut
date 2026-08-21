@@ -20,7 +20,7 @@ async function inspectBoot(browserType, engine, url, viewport, label) {
   page.on('console', m => {
     if (m.type() !== 'error') return;
     const text = m.text();
-    if (engine === 'Firefox' && text.includes('interactive-widget') && text.includes('not recognized and ignored')) {
+    if (text.includes('interactive-widget') && text.includes('not recognized and ignored')) {
       results.push(`${engine} ${label} compatibility notice: interactive-widget ignored`);
       return;
     }
