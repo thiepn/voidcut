@@ -77,10 +77,10 @@
   --vc-surface: #F7F3E8;
   --vc-surface-raised: #FFFCF3;
   --vc-bg-ink: #171714;
-  --vc-bg-ink-muted: #6A675F;
+  --vc-bg-ink-muted: #66625A;
   --vc-ink: #171714;
   --vc-ink-secondary: #5F5C54;
-  --vc-ink-muted: #7C786F;
+  --vc-ink-muted: #726E66;
   --vc-line: #B7B0A2;
   --vc-line-strong: #171714;
   --vc-accent: #EF593D;
@@ -94,7 +94,7 @@
   --vc-danger: #CC3932;
   --vc-success: #26754C;
   --vc-shadow: #171714;
-  --vc-on-accent: #FFF9ED;
+  --vc-on-accent: #171714;
   --vc-on-substrate: #F7F3E8;
   --vc-focus: #2253C7;
   --vc-danger-pattern: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--vc-danger) 42%, transparent) 6px 9px);
@@ -108,10 +108,10 @@ html[data-vc-theme="paper"] {
   --vc-surface: #F7F3E8;
   --vc-surface-raised: #FFFCF3;
   --vc-bg-ink: #171714;
-  --vc-bg-ink-muted: #6A675F;
+  --vc-bg-ink-muted: #66625A;
   --vc-ink: #171714;
   --vc-ink-secondary: #5F5C54;
-  --vc-ink-muted: #7C786F;
+  --vc-ink-muted: #726E66;
   --vc-line: #B7B0A2;
   --vc-line-strong: #171714;
   --vc-accent: #EF593D;
@@ -125,7 +125,7 @@ html[data-vc-theme="paper"] {
   --vc-danger: #CC3932;
   --vc-success: #26754C;
   --vc-shadow: #171714;
-  --vc-on-accent: #FFF9ED;
+  --vc-on-accent: #171714;
   --vc-on-substrate: #F7F3E8;
   --vc-focus: #2253C7;
 }
@@ -170,7 +170,7 @@ html[data-vc-theme="cobalt"] {
   --vc-bg-ink-muted: #D8D2C6;
   --vc-ink: #151514;
   --vc-ink-secondary: #5A5852;
-  --vc-ink-muted: #77736A;
+  --vc-ink-muted: #6D695F;
   --vc-line: #B7B1A5;
   --vc-line-strong: #151514;
   --vc-accent: #F5C638;
@@ -198,8 +198,8 @@ html[data-vc-theme="kelp"] {
   --vc-bg-ink: #F0E8D2;
   --vc-bg-ink-muted: #CBC7AF;
   --vc-ink: #15211C;
-  --vc-ink-secondary: #5D6A61;
-  --vc-ink-muted: #768077;
+  --vc-ink-secondary: #56645B;
+  --vc-ink-muted: #5B655D;
   --vc-line: #AAA891;
   --vc-line-strong: #15211C;
   --vc-accent: #E9784F;
@@ -227,8 +227,8 @@ html[data-vc-theme="plum"] {
   --vc-bg-ink: #F8E5E1;
   --vc-bg-ink-muted: #D8BCBC;
   --vc-ink: #241620;
-  --vc-ink-secondary: #745D6E;
-  --vc-ink-muted: #8E7688;
+  --vc-ink-secondary: #695269;
+  --vc-ink-muted: #71576B;
   --vc-line: #C3AAA9;
   --vc-line-strong: #241620;
   --vc-accent: #E34B61;
@@ -242,7 +242,7 @@ html[data-vc-theme="plum"] {
   --vc-danger: #C92F43;
   --vc-success: #34795A;
   --vc-shadow: #1C071D;
-  --vc-on-accent: #FFF1E7;
+  --vc-on-accent: #23151F;
   --vc-on-substrate: #F8E5E1;
   --vc-focus: #EFA43A;
 }
