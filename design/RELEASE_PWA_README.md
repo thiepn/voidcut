@@ -36,7 +36,9 @@ The manifest is scope-relative so the same package works from a repository subpa
 
 Cache namespace: `voidcut-shell-*`
 
-Current cache version: `6.0.0-pwa1`
+Current cache version: `6.0.0-pwa2`
+
+`pwa2` is the post-release layout-hotfix shell revision. It refreshes the precached design-system CSS containing the gameplay Pause and Records navigation corrections; application build and persistence contracts remain 6.0.0 / save 16 / replay 8.
 
 The worker precaches the complete runtime shell during `install`. Installation fails atomically if any required release asset is missing.
 
@@ -56,6 +58,8 @@ This prevents a release from being swapped silently during an active run.
 **Every deployment that changes any precached runtime asset must also change `VOIDCUT_CACHE_VERSION` in `sw.js`.**
 
 A new cache version gives the installing worker its own complete shell. On activation, only obsolete caches whose names begin with `voidcut-shell-` are deleted. Unrelated origin caches are never purged.
+
+For the next runtime-asset deployment, increment `6.0.0-pwa2` to a new revision such as `6.0.0-pwa3`.
 
 ## Fetch policy
 
@@ -84,7 +88,8 @@ Release/PWA certification must verify:
 - an updated worker waits rather than replacing the active release immediately;
 - `SKIP_WAITING` activates the update and removes only obsolete VOIDCUT caches;
 - no unexpected browser console, page, or request failures occur;
-- VD7's certified `index.html` and design-system CSS remain unchanged unless a release defect specifically requires modification;
+- VD7's certified `index.html` remains unchanged unless a release defect specifically requires modification;
+- any post-certification design-system CSS change receives a focused rendered regression pass before merge;
 - release metadata remains build 6.0.0, save 16, replay 8, arena 2, director 6, daily 1.
 
 ## Compatibility boundary
