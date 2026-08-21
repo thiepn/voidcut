@@ -1,0 +1,106 @@
+name: VD7 final browser certification
+
+on:
+  push:
+    branches: [chatgpt/vd7-theme-responsive-certification]
+  pull_request:
+    branches: [chatgpt/vd6-system-utility-reconstruction]
+
+permissions:
+  contents: write
+
+jobs:
+  certify-vd7:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/vd7-theme-responsive-certification
+          fetch-depth: 0
+      - name: Apply VD7 product migration
+        run: python3 design/vd7_patch.py
+      - name: Verify source contracts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          import re
+          h=Path('index.html').read_text(encoding='utf-8')
+          c=Path('design/voidcut-design-system.css').read_text(encoding='utf-8')
+          for x in ['name="voidcut-visual-phase" content="VD7"','VD7 THEME SUITE + RESPONSIVE CERTIFICATION',"const VD7_CERT_VERSION='VD7.0.0'","Object.defineProperty(window,'VoidcutCertification'","const VD6_SYSTEM_VERSION='VD6.0.0'","const VD5_COSMETICS_VERSION='VD5.0.0'","const VD4_SECONDARY_VERSION='VD4.0.0'","const VD3_SHELL_VERSION='VD3.0.0'","const VD2_HUD_VERSION='VD2.0.0'",'drawCoreLightField(){return}']:
+            assert x in h,x
+          for n,v in {'voidcut-build':'6.0.0','voidcut-save-schema':'16','voidcut-replay-version':'8','voidcut-arena-generation':'2','voidcut-director-generation':'6','voidcut-daily-generation':'1'}.items():
+            m=re.search(rf'<meta name="{n}" content="([^"]+)"',h); assert m and m.group(1)==v,(n,m.group(1) if m else None)
+          HTMLParser().feed(h)
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',h,re.S|re.I)
+          Path('vd7-inline-check.js').write_text(max(scripts,key=len),encoding='utf-8')
+          print('VD7 contracts PASS',len(h.encode()),len(c.encode()))
+          PY
+          node --check vd7-inline-check.js
+          rm vd7-inline-check.js
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Run 150-check browser matrix
+        run: |
+          python3 -m http.server 4173 >/tmp/vd7-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          sleep 1
+          cat > vd7-browser.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const V=[['PHONE-S',360,640],['PHONE-M',390,844],['PHONE-L',412,915],['TABLET-P',768,1024],['TABLET-L',820,1180],['DESKTOP-720',1280,720],['DESKTOP-900',1440,900],['DESKTOP-FHD',1920,1080],['DESKTOP-QHD',2560,1440],['ULTRAWIDE',3440,1440]];
+          const T=['paper','carbon','cobalt','kelp','plum','mono'];
+          const S=['menu','recordsPanel','competitionPanel','masteryPanel','cosmeticsPanel','settingsPanel','diagnosticsPanel','pausePanel','result','replayHud'];
+          const OLD=['rgb(45, 226, 255)','rgba(45, 226, 255','rgb(255, 45, 158)','rgba(255, 45, 158'];
+          const b=await chromium.launch({headless:true}); const failures=[]; let checks=0;
+          for(const [vn,w,h] of V){
+            const cx=await b.newContext({viewport:{width:w,height:h},deviceScaleFactor:1}); const p=await cx.newPage(); const errors=[];
+            p.on('pageerror',e=>errors.push(e.message)); p.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await p.goto('http://127.0.0.1:4173/index.html',{waitUntil:'domcontentloaded'}); await p.waitForFunction(()=>window.VoidcutCertification&&window.VoidcutDesign); await p.waitForTimeout(80);
+            async function inspect(theme,screen){
+              const r=await p.evaluate(({theme,screen,OLD})=>{
+                window.VoidcutDesign.applyTheme(theme,{persist:false}); window.VoidcutCertification.syncThemeColor();
+                document.querySelectorAll('.overlay').forEach(x=>x.classList.add('hidden')); document.getElementById('menu')?.classList.add('hidden'); document.getElementById('replayHud')?.classList.add('hidden');
+                const target=document.getElementById(screen); target?.classList.remove('hidden');
+                if(screen==='replayHud') document.getElementById('wrap')?.style.setProperty('display','block');
+                const audit=window.VoidcutCertification.audit(), root=document.documentElement;
+                const overflow=!!target&&target.scrollWidth>target.clientWidth+1;
+                const leaks=[];
+                if(target){
+                  const els=[target,...target.querySelectorAll('*')].filter(el=>{const s=getComputedStyle(el),q=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&q.width>0&&q.height>0}).slice(0,1000);
+                  const props=['color','backgroundColor','backgroundImage','borderTopColor','borderRightColor','borderBottomColor','borderLeftColor','boxShadow','textShadow','filter','outlineColor'];
+                  for(const el of els){for(const pseudo of [null,'::before','::after']){const s=getComputedStyle(el,pseudo),text=props.map(k=>s[k]||'').join('|');if(OLD.some(x=>text.includes(x))){leaks.push(`${el.tagName}#${el.id}.${String(el.className||'').slice(0,50)} ${pseudo||'self'} ${text.slice(0,160)}`);break}}if(leaks.length>=6)break}
+                }
+                return {audit,overflow,rootOverflow:root.scrollWidth>innerWidth+1,bodyOverflow:document.body.scrollWidth>innerWidth+1,leaks};
+              },{theme,screen,OLD});
+              checks++;
+              const k=`${vn}/${theme}/${screen}`;
+              if(r.rootOverflow||r.bodyOverflow||r.overflow)failures.push(`${k} overflow root=${r.rootOverflow} body=${r.bodyOverflow} screen=${r.overflow}`);
+              if(r.audit.touchFailures.length)failures.push(`${k} touch ${JSON.stringify(r.audit.touchFailures.slice(0,4))}`);
+              if(!r.audit.themeSuite)failures.push(`${k} theme contrast`);
+              if(!r.audit.themeColorSynced)failures.push(`${k} theme-color`);
+              if(r.leaks.length)failures.push(`${k} legacy-color ${JSON.stringify(r.leaks)}`);
+            }
+            for(const t of T)await inspect(t,'menu');
+            for(const s of S.slice(1))await inspect('paper',s);
+            if(errors.length)failures.push(`${vn} runtime ${JSON.stringify(errors)}`);
+            await cx.close();
+          }
+          await b.close(); console.log(`VD7 browser checks ${checks}`);
+          if(failures.length){console.error(`VD7 FAILURES ${failures.length}`);for(const f of failures.slice(0,100))console.error('- '+f);process.exit(1)}
+          console.log('VD7 browser matrix PASS');
+          JS
+          node vd7-browser.mjs
+          rm vd7-browser.mjs
+      - name: Commit certified product files
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet -- index.html design/voidcut-design-system.css; then echo "Product already certified"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- index.html design/voidcut-design-system.css
+          git commit -m "VD7: certify themes and responsive system"
+          git push origin HEAD:chatgpt/vd7-theme-responsive-certification
