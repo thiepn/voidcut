@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - chatgpt/vd7-theme-responsive-certification
+  pull_request:
+    branches:
+      - chatgpt/vd6-system-utility-reconstruction
 
 permissions:
   contents: write
