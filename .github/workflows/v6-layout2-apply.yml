@@ -1,0 +1,117 @@
+name: VOIDCUT v6 layout hotfix round 2 apply
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'chatgpt/v6.0.0-layout-hotfix'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Apply round-two layout hotfix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          css=Path('design/voidcut-design-system.css')
+          t=css.read_text(encoding='utf-8')
+          marker='/* === V6 POST-RELEASE LAYOUT HOTFIX ===================================== */'
+          if marker not in t:
+              raise SystemExit('existing hotfix marker missing')
+          block=r'''/* === V6 POST-RELEASE LAYOUT HOTFIX ===================================== */
+/* Pause keeps a 44px accessible hit target, while the visible face scales to
+   remain inside the top strip instead of covering canvas HUD information. */
+#pauseBtn{
+  left:50%!important;
+  right:auto!important;
+  top:0!important;
+  transform:translateX(-50%)!important;
+  width:44px!important;
+  height:44px!important;
+  min-width:44px!important;
+  min-height:44px!important;
+  padding:clamp(3px,.8vw,6px) 0 0!important;
+  display:grid!important;
+  place-items:start center!important;
+  isolation:isolate!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+  color:var(--vc-on-accent)!important;
+  font:800 clamp(13px,2.2vw,16px)/1 var(--vc-font-sans)!important;
+}
+#pauseBtn::before{
+  content:""!important;
+  position:absolute!important;
+  z-index:-1!important;
+  left:50%!important;
+  top:0!important;
+  transform:translateX(-50%)!important;
+  width:clamp(28px,5.4vw,36px)!important;
+  height:clamp(20px,4.5vw,30px)!important;
+  background:var(--vc-accent)!important;
+  border:2px solid var(--vc-line-strong)!important;
+  box-shadow:2px 2px 0 var(--vc-line-strong)!important;
+}
+#pauseBtn:active{
+  transform:translate(-50%,2px)!important;
+  box-shadow:none!important;
+}
+#pauseBtn:active::before{
+  box-shadow:none!important;
+  transform:translate(calc(-50% + 1px),1px)!important;
+}
+
+/* Cosmetics already aligns its Back control to the centered product content
+   column. Use that same column for the four other primary utility tabs. */
+#recordsPanel>.screen-nav,
+#competitionPanel>.screen-nav,
+#masteryPanel>.screen-nav,
+#settingsPanel>.screen-nav{
+  width:min(1180px,94vw)!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+#recordsPanel .screen-nav #recordsBack{
+  width:auto!important;
+  min-width:104px!important;
+  max-width:none!important;
+  margin:0!important;
+}
+'''
+          css.write_text(t.split(marker,1)[0].rstrip()+'\n\n'+block+'\n',encoding='utf-8')
+
+          sw=Path('sw.js')
+          s=sw.read_text(encoding='utf-8')
+          if "6.0.0-pwa3" not in s:
+              if "6.0.0-pwa2" not in s:
+                  raise SystemExit('expected pwa2 cache revision missing')
+              sw.write_text(s.replace('6.0.0-pwa2','6.0.0-pwa3'),encoding='utf-8')
+
+          doc=Path('design/RELEASE_PWA_README.md')
+          d=doc.read_text(encoding='utf-8').replace('Current cache version: `6.0.0-pwa2`','Current cache version: `6.0.0-pwa3`')
+          doc.write_text(d,encoding='utf-8')
+          PY
+          node --check sw.js
+          test "$(git rev-parse HEAD:index.html)" = "8a8d8f2c21145cf9a53172e6bb1a900eae97b170"
+          grep -q 'height:clamp(20px,4.5vw,30px)' design/voidcut-design-system.css
+          grep -q '#settingsPanel>.screen-nav' design/voidcut-design-system.css
+          grep -q "VOIDCUT_CACHE_VERSION = '6.0.0-pwa3'" sw.js
+      - name: Commit product changes to hotfix branch
+        run: |
+          if git diff --quiet -- design/voidcut-design-system.css design/RELEASE_PWA_README.md sw.js; then
+            echo 'Product files already updated'
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add design/voidcut-design-system.css design/RELEASE_PWA_README.md sw.js
+          git commit -m "Improve pause visibility and align utility navigation"
+          git push origin HEAD:chatgpt/v6.0.0-layout-hotfix
