@@ -227,7 +227,7 @@
   height:44px!important;
   min-width:44px!important;
   min-height:44px!important;
-  padding:clamp(3px,.8vw,6px) 0 0!important;
+  padding:2px 0 0!important;
   display:grid!important;
   place-items:start center!important;
   isolation:isolate!important;
@@ -236,7 +236,7 @@
   box-shadow:none!important;
   backdrop-filter:none!important;
   color:var(--vc-on-accent)!important;
-  font:800 clamp(13px,2.2vw,16px)/1 var(--vc-font-sans)!important;
+  font:800 clamp(12px,1.7vw,14px)/1 var(--vc-font-sans)!important;
 }
 #pauseBtn::before{
   content:""!important;
@@ -245,8 +245,9 @@
   left:50%!important;
   top:0!important;
   transform:translateX(-50%)!important;
-  width:clamp(28px,5.4vw,36px)!important;
-  height:clamp(20px,4.5vw,30px)!important;
+  box-sizing:border-box!important;
+  width:clamp(30px,5.4vw,38px)!important;
+  height:clamp(18px,2.8vw,24px)!important;
   background:var(--vc-accent)!important;
   border:2px solid var(--vc-line-strong)!important;
   box-shadow:2px 2px 0 var(--vc-line-strong)!important;
@@ -266,6 +267,14 @@
   width:min(1180px,94vw)!important;
   margin-left:auto!important;
   margin-right:auto!important;
+}
+@media(max-width:760px){
+  #recordsPanel>.screen-nav,
+  #competitionPanel>.screen-nav,
+  #masteryPanel>.screen-nav,
+  #settingsPanel>.screen-nav{
+    width:100%!important;
+  }
 }
 #recordsPanel .screen-nav #recordsBack{
   width:auto!important;
