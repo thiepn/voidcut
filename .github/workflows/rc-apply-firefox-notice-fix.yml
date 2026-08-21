@@ -16,9 +16,10 @@ jobs:
         with:
           ref: chatgpt/v6-final-release-candidate
           fetch-depth: 0
-      - name: Apply exact harness-only compatibility filter
+      - name: Apply harness-only Firefox compatibility filters
         run: |
           python3 design/rc_firefox_notice_patch.py
+          python3 design/rc_firefox_notice_patch2.py
           node --check design/rc_browser_certify.mjs
       - name: Commit harness correction
         run: |
@@ -29,5 +30,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- design/rc_browser_certify.mjs
-          git commit -m "RC: classify Firefox interactive-widget notice"
+          git commit -m "RC: harden Firefox interactive-widget notice filter"
           git push origin HEAD:chatgpt/v6-final-release-candidate
