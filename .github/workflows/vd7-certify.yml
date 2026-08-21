@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - chatgpt/vd7-theme-responsive-certification
+  pull_request:
+    branches:
+      - chatgpt/vd6-system-utility-reconstruction
 
 permissions:
   contents: write
@@ -27,7 +30,7 @@ jobs:
           python3 - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
-          import math,re
+          import re
 
           html=Path('index.html').read_text(encoding='utf-8')
           css=Path('design/voidcut-design-system.css').read_text(encoding='utf-8')
@@ -55,7 +58,6 @@ jobs:
             m=re.search(rf'<meta name="{re.escape(name)}" content="([^"]+)"',html)
             if not m or m.group(1)!=expected: raise SystemExit(f'Contract changed: {name}')
 
-          # Persisted save IDs must remain intact.
           for token in ["arcade:{","sunset:{","ion:{","ice:{","vector:{","spectrum:{","availablePaletteIds(s)"]:
             if token not in html: raise SystemExit('Stable theme/save compatibility missing: '+token)
 
@@ -159,9 +161,7 @@ jobs:
                 document.querySelectorAll('.overlay').forEach(el=>el.classList.add('hidden'));
                 document.getElementById('menu')?.classList.remove('hidden');
               }
-              if(screenId==='replayHud'){
-                document.getElementById('wrap')?.style.setProperty('display','block');
-              }
+              if(screenId==='replayHud') document.getElementById('wrap')?.style.setProperty('display','block');
               const target=document.getElementById(screenId);
               const root=document.documentElement;
               const audit=window.VoidcutCertification.audit();
@@ -203,8 +203,6 @@ jobs:
               await setTheme(page,theme);
               await inspect(page,`${name}/${theme}`,'menu',true);
             }
-            // Whole-screen composition certification uses canonical Paper. Color ownership
-            // is scanned on every screen; theme contrast itself was already checked above.
             await setTheme(page,'paper');
             for(const screenId of screenTargets.filter(x=>x!=='menu')) await inspect(page,`${name}/paper`,screenId,true);
             if(errors.length) fail(`${name}: runtime errors ${JSON.stringify(errors)}`);
@@ -222,6 +220,7 @@ jobs:
           node /tmp/vd7-browser.mjs
 
       - name: Commit certified VD7 product files
+        if: github.event_name == 'push'
         run: |
           if git diff --quiet -- index.html design/voidcut-design-system.css; then
             echo "VD7 product files already certified"
