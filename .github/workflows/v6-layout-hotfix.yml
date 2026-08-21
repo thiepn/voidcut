@@ -1,11 +1,10 @@
 name: VOIDCUT v6 layout hotfix certification
 
 on:
-  push:
-    branches: [chatgpt/v6.0.0-layout-hotfix]
+  pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   certify-layout-hotfix:
@@ -14,79 +13,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: chatgpt/v6.0.0-layout-hotfix
-          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Apply focused layout corrections
+      - name: Static hotfix contract
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          css=Path('design/voidcut-design-system.css')
-          t=css.read_text(encoding='utf-8')
-          marker='/* === V6 POST-RELEASE LAYOUT HOTFIX ===================================== */'
-          block=r'''
-
-/* === V6 POST-RELEASE LAYOUT HOTFIX ===================================== */
-/* Keep Pause outside the compact HUD score text and keep Records Back on
-   the same left-aligned navigation geometry as the other utility screens. */
-#pauseBtn{
-  left:0!important;
-  width:44px!important;
-  height:44px!important;
-  min-width:44px!important;
-  min-height:44px!important;
-}
-#recordsPanel .screen-nav #recordsBack{
-  width:auto!important;
-  min-width:104px!important;
-  max-width:none!important;
-  margin:0!important;
-  margin-left:0!important;
-  margin-right:0!important;
-}
-'''
-          if marker not in t:
-              css.write_text(t.rstrip()+block+'\n',encoding='utf-8')
-              print('Applied layout hotfix CSS')
-          else:
-              print('Layout hotfix CSS already present')
-
-          sw=Path('sw.js')
-          s=sw.read_text(encoding='utf-8')
-          if '6.0.0-pwa2' not in s:
-              if '6.0.0-pwa1' not in s: raise SystemExit('Expected PWA cache revision not found')
-              sw.write_text(s.replace('6.0.0-pwa1','6.0.0-pwa2'),encoding='utf-8')
-              print('Bumped PWA cache revision to pwa2')
-
-          doc=Path('design/RELEASE_PWA_README.md')
-          d=doc.read_text(encoding='utf-8')
-          d=d.replace('Current cache version: `6.0.0-pwa1`','Current cache version: `6.0.0-pwa2`')
-          d=d.replace('`6.0.0-pwa1 → 6.0.0-pwa2`','`6.0.0-pwa2 → 6.0.0-pwa3`')
-          doc.write_text(d,encoding='utf-8')
-          PY
-          node --check sw.js
           test "$(git rev-parse HEAD:index.html)" = "8a8d8f2c21145cf9a53172e6bb1a900eae97b170"
           grep -q 'V6 POST-RELEASE LAYOUT HOTFIX' design/voidcut-design-system.css
-          grep -q '6.0.0-pwa2' sw.js
-
-      - name: Commit permanent hotfix before browser certification
-        run: |
-          if git diff --quiet -- design/voidcut-design-system.css design/RELEASE_PWA_README.md sw.js; then
-            echo 'Permanent hotfix already committed'
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add design/voidcut-design-system.css design/RELEASE_PWA_README.md sw.js
-            git commit -m "Fix gameplay pause and Records navigation layout"
-            git push origin HEAD:chatgpt/v6.0.0-layout-hotfix
-          fi
+          grep -q "VOIDCUT_CACHE_VERSION = '6.0.0-pwa2'" sw.js
+          node --check sw.js
 
       - name: Install Chromium
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
           npx playwright install --with-deps chromium
 
-      - name: Render regression checks
+      - name: Render reported regressions
         run: |
           python3 -m http.server 4173 >/tmp/voidcut-hotfix-http.log 2>&1 &
           SERVER_PID=$!
@@ -95,26 +36,48 @@ jobs:
           cat > /tmp/v6-layout-check.mjs <<'JS'
           import { chromium } from 'playwright';
           const browser=await chromium.launch({headless:true});
-          const viewports=[['reported-game',565,974],['phone',390,844],['tablet',768,1024],['reported-records',1269,838],['desktop-wide',1440,900]];
+          const viewports=[
+            ['reported-game',565,974],
+            ['phone-small',360,640],
+            ['phone',390,844],
+            ['tablet',768,1024],
+            ['reported-records',1269,838],
+            ['desktop',1440,900]
+          ];
           const failures=[];
           for(const [name,width,height] of viewports){
             const context=await browser.newContext({viewport:{width,height},serviceWorkers:'block'});
             const page=await context.newPage();
             const runtime=[];
-            page.on('pageerror',e=>runtime.push(e.message));
+            page.on('pageerror',e=>runtime.push(`pageerror ${e.message}`));
+            page.on('console',m=>{if(m.type()==='error')runtime.push(`console ${m.text()}`)});
             page.on('requestfailed',r=>runtime.push(`request ${r.url()} ${r.failure()?.errorText||''}`));
             await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded'});
             await page.waitForFunction(()=>window.VoidcutDesign&&document.querySelector('#recordsPanel > .screen-nav'));
+
             const pause=await page.evaluate(()=>{
               const wrap=document.getElementById('wrap').getBoundingClientRect();
               const canvas=document.getElementById('game').getBoundingClientRect();
-              const b=document.getElementById('pauseBtn'); b.style.display='block';
-              const r=b.getBoundingClientRect(),scale=canvas.width/720,scoreTextStart=canvas.left+60*scale;
-              return {left:r.left,right:r.right,width:r.width,height:r.height,wrapLeft:wrap.left,scoreTextStart};
+              const b=document.getElementById('pauseBtn');
+              b.style.display='block';
+              const r=b.getBoundingClientRect(),s=getComputedStyle(b),scale=canvas.width/720;
+              const scoreSectionRight=canvas.left+258*scale;
+              const hudTop=canvas.top+42*scale;
+              const bg=s.backgroundColor;
+              const transparent=bg==='transparent'||bg==='rgba(0, 0, 0, 0)';
+              return {
+                left:r.left,right:r.right,top:r.top,width:r.width,height:r.height,
+                wrapLeft:wrap.left,wrapTop:wrap.top,wrapCenter:wrap.left+wrap.width/2,
+                center:r.left+r.width/2,scoreSectionRight,hudTop,transparent,
+                border:parseFloat(s.borderTopWidth)||0,shadow:s.boxShadow
+              };
             });
             if(pause.width<43.9||pause.height<43.9)failures.push(`${name}: pause target ${pause.width}x${pause.height}`);
-            if(Math.abs(pause.left-pause.wrapLeft)>1.5)failures.push(`${name}: pause left ${pause.left} vs wrap ${pause.wrapLeft}`);
-            if(pause.right>pause.scoreTextStart-1)failures.push(`${name}: pause overlaps score (${pause.right} > ${pause.scoreTextStart})`);
+            if(Math.abs(pause.center-pause.wrapCenter)>1.5)failures.push(`${name}: pause not centered in top strip`);
+            if(Math.abs(pause.top-pause.wrapTop)>1.5)failures.push(`${name}: pause top ${pause.top} vs wrap ${pause.wrapTop}`);
+            if(pause.left<=pause.scoreSectionRight)failures.push(`${name}: pause hit target intersects score section`);
+            if(!pause.transparent||pause.border>0||pause.shadow!=='none')failures.push(`${name}: pause still has opaque/decorative covering surface`);
+
             const records=await page.evaluate(()=>{
               document.querySelectorAll('.overlay').forEach(x=>x.classList.add('hidden'));
               const panel=document.getElementById('recordsPanel'); panel.classList.remove('hidden');
@@ -130,8 +93,8 @@ jobs:
             await context.close();
           }
           await browser.close();
-          console.log(`Layout assertions: ${viewports.length*2}`);
+          console.log(`Rendered regression assertions: ${viewports.length*2}`);
           if(failures.length){for(const f of failures)console.error('- '+f);process.exit(1)}
-          console.log('VOIDCUT V6 LAYOUT HOTFIX PASS');
+          console.log('VOIDCUT V6 LAYOUT HOTFIX CERTIFICATION PASS');
           JS
           node /tmp/v6-layout-check.mjs
