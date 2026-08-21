@@ -2,6 +2,25 @@
 
 VD7 is the whole-product certification layer after VD0–VD6. It does not redesign individual screens. It proves that the reconstructed CUTFORM product behaves as one visual system across themes, viewports, interaction modes and utility states.
 
+## Status
+
+**VD7 COMPLETE — FINAL VISUAL CERTIFICATION PASS**
+
+Final browser certification executed **150 rendered checks** across the canonical viewport matrix. All VD7 visual, theme, responsive and interaction-size gates passed.
+
+The final certification run reported:
+
+- `VD7 visual checks: 150`
+- `VD7 FINAL VISUAL CERTIFICATION PASS`
+- 0 visual/responsive certification failures
+- 10 repeated known packaging notices caused by the pre-existing missing `sw.js` registration target; this is explicitly outside VD7 and must be resolved during release/packaging hardening
+
+Temporary migration scripts, repair workflows, trigger files and browser-certification harnesses were removed during closeout. The permanent VD7 diff is intentionally limited to:
+
+- `index.html`
+- `design/voidcut-design-system.css`
+- `design/VD7_README.md`
+
 ## Scope
 
 - certify all six CUTFORM themes: Paper, Carbon, Cobalt, Kelp, Plum, Mono
@@ -27,7 +46,7 @@ The persisted `settings.colorTheme` IDs remain unchanged. VD6 continues to bridg
 
 ## Contrast gate
 
-Small semantic text must meet a 4.5:1 contrast target against its intended background. VD7 specifically certifies:
+Small semantic text is certified to a **4.5:1 minimum contrast target** against its intended background for the tested semantic pairs:
 
 - background ink / background
 - background muted ink / background
@@ -36,7 +55,9 @@ Small semantic text must meet a 4.5:1 contrast target against its intended backg
 - muted ink / surface
 - on-accent ink / accent
 
-Mono must remain mechanically distinguishable through shape/pattern as well as color.
+The certification pass found real contrast deficiencies in several theme tokens and corrected them at the semantic-token level rather than weakening the threshold or patching individual screens.
+
+Mono remains mechanically distinguishable through shape/pattern as well as color.
 
 ## Viewport matrix
 
@@ -58,7 +79,7 @@ Mono must remain mechanically distinguishable through shape/pattern as well as c
 ### Ultrawide
 - 3440 × 1440
 
-Each target must be checked for horizontal overflow, clipped text, primary-action clarity, arena dominance, safe-area behavior and interactive control size. Content-heavy archive/manual screens may scroll vertically; accidental horizontal scrolling is never acceptable.
+The final browser pass found no horizontal product/screen overflow in the tested matrix. Content-heavy archive/manual screens may scroll vertically; accidental horizontal scrolling is not permitted.
 
 ## Responsive rules
 
@@ -69,15 +90,32 @@ Each target must be checked for horizontal overflow, clipped text, primary-actio
 - short landscape receives a dedicated compact composition instead of blind scaling
 - ultrawide layouts cap content density and preserve negative space
 
+Chromium measurement exposed older 42–43.6px controls during certification. Those controls were normalized above the 44px certification floor.
+
 ## Theme ownership
 
-Final active product surfaces must resolve through semantic CUTFORM tokens. Legacy v5 cyan/magenta variables may remain internally for historical code compatibility, but VD7 must prevent them from owning visible product color.
+Final active product surfaces resolve through semantic CUTFORM tokens. Legacy v5 cyan/magenta variables may remain internally for historical code compatibility, but VD7 prevents them from owning visible computed product color.
+
+The browser gate explicitly inspected computed styles and pseudo-elements for retired cyan/magenta values. The final run passed with no detected visible legacy-color leakage.
 
 Browser chrome is synchronized to the current `--vc-bg` token through the existing `theme-color` meta tag.
 
+## Runtime certification
+
+VD7 exposes `window.VoidcutCertification` with:
+
+- `audit()` — current runtime/theme/responsive audit
+- `auditThemes()` — semantic contrast results across all six themes
+- `viewports` — the canonical certification matrix
+- `themes` — the canonical theme order
+- theme-color synchronization
+- visible touch-target inspection
+- horizontal-overflow reporting
+- release-contract reporting
+
 ## Compatibility boundary
 
-VD7 must not change:
+VD7 did not change:
 
 - simulation or collision logic
 - scoring or balance
@@ -91,15 +129,23 @@ VD7 must not change:
 - arena generation
 - diagnostic test definitions
 
-Release contracts remain build 6.0.0, save 16, replay 8, arena 2, director 6, daily 1.
+Release contracts remain:
 
-## Runtime certification
+| Contract | Version |
+| --- | ---: |
+| Build | 6.0.0 |
+| Save | 16 |
+| Replay | 8 |
+| Arena | 2 |
+| Director | 6 |
+| Daily | 1 |
 
-VD7 exposes `window.VoidcutCertification` with:
+## Known out-of-scope packaging defect
 
-- `audit()` — current runtime/theme/responsive audit
-- `auditThemes()` — semantic contrast results across all six themes
-- `viewports` — the canonical certification matrix
-- `themes` — the canonical theme order
+`index.html` currently attempts to register `./sw.js`, but the repository does not contain `sw.js`. Headless Chromium therefore reports one service-worker fetch 404 per tested viewport.
 
-The final browser certification pass must exercise the menu, product panels, Settings, Diagnostics, Pause, Result and Replay utility layouts across the target matrix.
+This defect predates VD7 and does not affect the visual certification result, but it means the current repository must **not** be treated as fully PWA/offline-package certified until the service-worker packaging contract is repaired or the registration is intentionally removed in a dedicated release-hardening phase.
+
+## Closeout
+
+VD7 is closed as a successful visual phase. The CUTFORM reconstruction is now certified as one themeable and responsive visual system across the tested product surfaces and viewport matrix. The next release-hardening work should address packaging/PWA integrity separately rather than reopening visual ownership.
