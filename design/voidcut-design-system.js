@@ -211,3 +211,68 @@
   Object.defineProperty(window, 'VoidcutDesign', { value: api, enumerable: true, configurable: false, writable: false });
   initialize();
 })();
+
+/* v6.0.0 post-release layout hotfix 2 */
+(() => {
+  'use strict';
+  const style = document.createElement('style');
+  style.id = 'voidcut-layout-hotfix-2';
+  style.textContent = `
+#pauseBtn{
+  left:50%!important;
+  right:auto!important;
+  top:0!important;
+  transform:translateX(-50%)!important;
+  width:44px!important;
+  height:44px!important;
+  min-width:44px!important;
+  min-height:44px!important;
+  padding:clamp(3px,.8vw,6px) 0 0!important;
+  display:grid!important;
+  place-items:start center!important;
+  isolation:isolate!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+  color:var(--vc-on-accent)!important;
+  font:800 clamp(13px,2.2vw,16px)/1 var(--vc-font-sans)!important;
+}
+#pauseBtn::before{
+  content:""!important;
+  position:absolute!important;
+  z-index:-1!important;
+  left:50%!important;
+  top:0!important;
+  transform:translateX(-50%)!important;
+  width:clamp(28px,5.4vw,36px)!important;
+  height:clamp(20px,4.5vw,30px)!important;
+  background:var(--vc-accent)!important;
+  border:2px solid var(--vc-line-strong)!important;
+  box-shadow:2px 2px 0 var(--vc-line-strong)!important;
+}
+#pauseBtn:active{
+  transform:translate(-50%,2px)!important;
+  box-shadow:none!important;
+}
+#pauseBtn:active::before{
+  box-shadow:none!important;
+  transform:translate(calc(-50% + 1px),1px)!important;
+}
+#recordsPanel>.screen-nav,
+#competitionPanel>.screen-nav,
+#masteryPanel>.screen-nav,
+#settingsPanel>.screen-nav{
+  width:min(1180px,94vw)!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+#recordsPanel .screen-nav #recordsBack{
+  width:auto!important;
+  min-width:104px!important;
+  max-width:none!important;
+  margin:0!important;
+}
+`;
+  document.head.appendChild(style);
+})();
