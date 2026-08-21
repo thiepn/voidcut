@@ -6,6 +6,10 @@ on:
       - chatgpt/vd1-core-renderer-reconstruction
     paths:
       - .github/workflows/vd1-bootstrap.yml
+  pull_request:
+    branches:
+      - chatgpt/vd0-visual-infrastructure
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
