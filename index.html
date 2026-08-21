@@ -1617,6 +1617,22 @@ button:focus-visible,input:focus-visible,summary:focus-visible,[tabindex]:focus-
 /* Remaining ornamental layers may keep geometry but never legacy glow. */
 #recordsPanel .record-card,#competitionPanel .competition-board,#masteryPanel .mastery-hero,#masteryPanel .mastery-card,#settingsPanel .settings-group,#diagnosticsPanel .vd6-report-sheet,.vd6-replay-instrument{filter:none!important}
 
+
+/* === VD7 BROWSER REVIEW CORRECTIONS II ================================= */
+/* Second rendered pass: neutralize only the residual pseudo-element chrome
+   and fixed-height rules reported by Chromium. */
+#menu .primary-icon::after{filter:none!important;box-shadow:none!important}
+.screen-hero::after{
+  background:linear-gradient(90deg,var(--vc-accent),color-mix(in srgb,var(--vc-line) 70%,transparent) 38%,color-mix(in srgb,var(--vc-line) 70%,transparent) 72%,var(--vc-accent-alt))!important;
+  box-shadow:none!important;filter:none!important;
+}
+.screen-nav .screen-back,.cos-back{height:46px!important;min-height:46px!important;max-height:none!important}
+#recordsPanel .record-card::after,#recordsPanel .record-card.featured::after{background:color-mix(in srgb,var(--vc-accent) 18%,transparent)!important;box-shadow:none!important;filter:none!important}
+#recordsPanel .record-card.featured:nth-child(even)::after{background:color-mix(in srgb,var(--vc-accent-alt) 16%,transparent)!important}
+#masteryPanel .mastery-rank-emblem::after{background:transparent!important;border-color:var(--vc-accent-alt)!important;box-shadow:none!important;filter:none!important}
+#cosHeroArt.cos-hero-art::after{display:none!important;content:none!important;background:none!important;box-shadow:none!important;filter:none!important}
+#replayBadge::before{background:var(--vc-accent)!important;box-shadow:none!important;filter:none!important}
+
 </style>
 
 <link rel="stylesheet" href="./design/voidcut-design-system.css" />
