@@ -41,6 +41,7 @@ jobs:
       - name: Run final browser certification
         run: |
           python3 design/rc_firefox_notice_patch3.py
+          python3 design/rc_firefox_runtime_filter.py
           node --check design/rc_browser_certify.mjs
           python3 -m http.server 4173 --directory /tmp/voidcut-root >/tmp/voidcut-root-http.log 2>&1 &
           ROOT_PID=$!
