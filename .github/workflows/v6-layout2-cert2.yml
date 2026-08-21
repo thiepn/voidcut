@@ -1,0 +1,116 @@
+name: VOIDCUT v6 layout hotfix 2 final certification
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Static contract
+        run: |
+          test "$(git rev-parse HEAD:index.html)" = "8a8d8f2c21145cf9a53172e6bb1a900eae97b170"
+          grep -q "VOIDCUT_CACHE_VERSION = '6.0.0-pwa3'" sw.js
+          grep -q 'voidcut-layout-hotfix-2' design/voidcut-design-system.js
+          grep -q 'height:clamp(18px,2.8vw,24px)' design/voidcut-design-system.js
+          node --check design/voidcut-design-system.js
+          node --check sw.js
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Render final geometry matrix
+        run: |
+          python3 -m http.server 4173 >/tmp/voidcut-layout2-final-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          sleep 1
+          cat > v6-layout2-final-check.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const viewports=[
+            ['reported-game',565,974],
+            ['phone-small',360,640],
+            ['phone',390,844],
+            ['tablet',768,1024],
+            ['reported-tabs',1269,838],
+            ['desktop',1440,900]
+          ];
+          const failures=[];
+          for(const [name,width,height] of viewports){
+            const context=await browser.newContext({viewport:{width,height},serviceWorkers:'block'});
+            const page=await context.newPage();
+            const runtime=[];
+            page.on('pageerror',e=>runtime.push(`pageerror ${e.message}`));
+            page.on('console',m=>{if(m.type()==='error')runtime.push(`console ${m.text()}`)});
+            page.on('requestfailed',r=>runtime.push(`request ${r.url()} ${r.failure()?.errorText||''}`));
+            await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded'});
+            await page.waitForFunction(()=>window.VoidcutDesign&&document.getElementById('voidcut-layout-hotfix-2')&&document.querySelector('#recordsPanel > .screen-nav'));
+
+            const pause=await page.evaluate(()=>{
+              const wrap=document.getElementById('wrap').getBoundingClientRect();
+              const canvas=document.getElementById('game').getBoundingClientRect();
+              const b=document.getElementById('pauseBtn');
+              b.style.display='grid';
+              const r=b.getBoundingClientRect(),s=getComputedStyle(b),p=getComputedStyle(b,'::before');
+              const scale=canvas.width/720;
+              const hudTop=canvas.top+42*scale;
+              const ph=parseFloat(p.height)||0;
+              const shadowExtra=p.boxShadow==='none'?0:2;
+              const borderExtra=p.boxSizing==='border-box'?0:(parseFloat(p.borderTopWidth)||0)+(parseFloat(p.borderBottomWidth)||0);
+              const faceBottom=r.top+(parseFloat(p.top)||0)+ph+borderExtra+shadowExtra;
+              return {
+                targetW:r.width,targetH:r.height,center:r.left+r.width/2,wrapCenter:wrap.left+wrap.width/2,
+                top:r.top,wrapTop:wrap.top,hudTop,faceBottom,pw:parseFloat(p.width)||0,ph,
+                faceBg:p.backgroundColor,faceBorder:parseFloat(p.borderTopWidth)||0,faceShadow:p.boxShadow,
+                glyphColor:s.color,boxSizing:p.boxSizing,content:p.content
+              };
+            });
+            if(pause.targetW<43.9||pause.targetH<43.9)failures.push(`${name}: pause hit target ${pause.targetW}x${pause.targetH}`);
+            if(Math.abs(pause.center-pause.wrapCenter)>1.5)failures.push(`${name}: pause not centered`);
+            if(Math.abs(pause.top-pause.wrapTop)>1.5)failures.push(`${name}: pause not at top strip`);
+            if(pause.pw<29||pause.ph<17.5)failures.push(`${name}: pause visible face too small ${pause.pw}x${pause.ph}`);
+            if(pause.faceBg==='transparent'||pause.faceBg==='rgba(0, 0, 0, 0)')failures.push(`${name}: pause visible face transparent`);
+            if(pause.faceBorder<1.5||pause.faceShadow==='none')failures.push(`${name}: pause visible face lacks physical edge/shadow`);
+            if(pause.content==='none'||pause.content==='normal')failures.push(`${name}: pause face pseudo not rendered`);
+            if(pause.boxSizing!=='border-box')failures.push(`${name}: pause face sizing is not border-box`);
+            if(pause.faceBottom>pause.hudTop+1.5)failures.push(`${name}: pause visible face overlaps HUD (${pause.faceBottom.toFixed(1)} > ${pause.hudTop.toFixed(1)})`);
+
+            const nav=await page.evaluate(()=>{
+              const ids=['recordsPanel','competitionPanel','masteryPanel','settingsPanel','cosmeticsPanel'];
+              ids.forEach(id=>document.getElementById(id)?.classList.add('hidden'));
+              const cosmetics=document.getElementById('cosmeticsPanel');cosmetics.classList.remove('hidden');
+              const cb=document.getElementById('cosmeticsBackTop').getBoundingClientRect();
+              const reference={left:cb.left,parent:document.getElementById('cosmeticsBackTop').parentElement?.className||''};
+              const items=[];
+              for(const [panelId,backId] of [['recordsPanel','recordsBack'],['competitionPanel','competitionBack'],['masteryPanel','masteryBack'],['settingsPanel','settingsBack']]){
+                ids.forEach(id=>document.getElementById(id)?.classList.add('hidden'));
+                const panel=document.getElementById(panelId);panel.classList.remove('hidden');
+                const b=document.getElementById(backId).getBoundingClientRect();
+                items.push({panelId,left:b.left,parent:document.getElementById(backId).parentElement?.className||''});
+              }
+              return {reference,items,rootOverflow:document.documentElement.scrollWidth>window.innerWidth+1};
+            });
+            if(!nav.reference.parent.includes('cos-header'))failures.push(`${name}: Cosmetics Back moved from its original header`);
+            for(const item of nav.items){
+              if(!item.parent.includes('screen-nav'))failures.push(`${name}: ${item.panelId} Back left shared nav`);
+              if(Math.abs(item.left-nav.reference.left)>2)failures.push(`${name}: ${item.panelId} Back ${item.left} != Cosmetics ${nav.reference.left}`);
+            }
+            if(nav.rootOverflow)failures.push(`${name}: viewport horizontal overflow`);
+            if(runtime.length)failures.push(`${name}: runtime ${runtime.join(' | ')}`);
+            await context.close();
+          }
+          await browser.close();
+          console.log(`Rendered viewport groups: ${viewports.length}`);
+          if(failures.length){for(const f of failures)console.error('- '+f);process.exit(1)}
+          console.log('VOIDCUT V6 LAYOUT HOTFIX 2 FINAL CERTIFICATION PASS');
+          JS
+          node v6-layout2-final-check.mjs
+          rm -f v6-layout2-final-check.mjs
