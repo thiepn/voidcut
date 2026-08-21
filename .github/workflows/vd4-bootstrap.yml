@@ -1,0 +1,96 @@
+name: VD4 secondary screens bootstrap
+
+on:
+  pull_request:
+    branches:
+      - chatgpt/vd3-product-shell-reconstruction
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-secondary-screens:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out VD4 branch
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt/vd4-secondary-screens-reconstruction
+          fetch-depth: 0
+
+      - name: Apply VD4 migration
+        run: python3 design/vd4_patch.py
+
+      - name: Validate VD4 contract
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+
+          text = Path('index.html').read_text(encoding='utf-8')
+          required = [
+              'name="voidcut-visual-phase" content="VD4"',
+              "const VD4_SECONDARY_VERSION='VD4.0.0'",
+              "Object.defineProperty(window,'VoidcutSecondaryScreens'",
+              'class="screen-hero records-screen-hero vd4-masthead"',
+              'class="screen-hero compete-screen-hero vd4-masthead"',
+              'class="screen-hero mastery-screen-hero vd4-masthead"',
+              'class="vd4-section-index" aria-hidden="true">01</div>',
+              'class="vd4-section-index" aria-hidden="true">02</div>',
+              'class="vd4-section-index" aria-hidden="true">03</div>',
+              "String(i+1).padStart(2,'0')",
+              "const VD3_SHELL_VERSION='VD3.0.0'",
+              "const VD2_HUD_VERSION='VD2.0.0'",
+              'drawCoreLightField(){return}',
+          ]
+          missing = [token for token in required if token not in text]
+          if missing:
+              raise SystemExit('Missing VD4 tokens: ' + ', '.join(missing))
+          if text.count('/* === VD4 CUTFORM SECONDARY SCREENS') != 1:
+              raise SystemExit('VD4 CSS marker must occur exactly once')
+          if text.count('// === VD4 SECONDARY SCREEN CONTRACT') != 1:
+              raise SystemExit('VD4 JS marker must occur exactly once')
+          for panel, next_panel in [('recordsPanel','competitionPanel'),('competitionPanel','masteryPanel'),('masteryPanel','replayHud')]:
+              start = text.index(f'<section id="{panel}"')
+              end = text.index(f'id="{next_panel}"', start)
+              chunk = text[start:end]
+              if 'screen-mark' in chunk:
+                  raise SystemExit(f'Legacy screen-mark remains in {panel} active header/content block')
+          for name, expected in {
+              'voidcut-build': '6.0.0',
+              'voidcut-save-schema': '16',
+              'voidcut-replay-version': '8',
+              'voidcut-arena-generation': '2',
+              'voidcut-director-generation': '6',
+              'voidcut-daily-generation': '1',
+          }.items():
+              m = re.search(rf'<meta name="{re.escape(name)}" content="([^"]+)"', text)
+              if not m or m.group(1) != expected:
+                  raise SystemExit(f'Release contract changed for {name}: {m.group(1) if m else "missing"}')
+
+          class Parser(HTMLParser):
+              pass
+          Parser().feed(text)
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, re.S | re.I)
+          inline = max(scripts, key=len)
+          Path('/tmp/voidcut-inline.js').write_text(inline, encoding='utf-8')
+          print('VD4 static contract PASS')
+          print('HTML bytes:', len(text.encode('utf-8')))
+          print('Inline JS bytes:', len(inline.encode('utf-8')))
+          PY
+          node --check /tmp/voidcut-inline.js
+
+      - name: Commit reconstructed secondary screens
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "index.html already contains VD4 secondary screens"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- index.html
+          git commit -m "VD4: reconstruct secondary screens"
+          git push origin HEAD:chatgpt/vd4-secondary-screens-reconstruction
