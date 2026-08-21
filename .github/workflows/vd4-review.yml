@@ -1,0 +1,72 @@
+name: VD4 certification corrections
+
+on:
+  pull_request:
+    branches:
+      - chatgpt/vd3-product-shell-reconstruction
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  certify-secondary-screens:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out VD4 branch
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt/vd4-secondary-screens-reconstruction
+          fetch-depth: 0
+
+      - name: Apply certification corrections
+        run: python3 design/vd4_review_patch.py
+
+      - name: Validate final VD4 contract
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+          text=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'name="voidcut-visual-phase" content="VD4"',
+            '/* === VD4 CUTFORM SECONDARY SCREENS',
+            '/* === VD4 CERTIFICATION CORRECTIONS',
+            "const VD4_SECONDARY_VERSION='VD4.0.0'",
+            '<span>RANK</span><span>SCORE</span><span>CHAMBER</span><span>TIME</span>',
+            "String(i+1).padStart(2,'0')",
+            "const VD3_SHELL_VERSION='VD3.0.0'",
+            "const VD2_HUD_VERSION='VD2.0.0'",
+            'drawCoreLightField(){return}',
+          ]
+          missing=[x for x in required if x not in text]
+          if missing: raise SystemExit('Missing final VD4 tokens: '+', '.join(missing))
+          for name,expected in {
+            'voidcut-build':'6.0.0','voidcut-save-schema':'16','voidcut-replay-version':'8',
+            'voidcut-arena-generation':'2','voidcut-director-generation':'6','voidcut-daily-generation':'1'
+          }.items():
+            m=re.search(rf'<meta name="{re.escape(name)}" content="([^"]+)"',text)
+            if not m or m.group(1)!=expected: raise SystemExit(f'Contract changed: {name}')
+          HTMLParser().feed(text)
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',text,re.S|re.I)
+          inline=max(scripts,key=len)
+          Path('/tmp/voidcut-inline.js').write_text(inline,encoding='utf-8')
+          print('VD4 certification PASS')
+          print('HTML bytes:',len(text.encode('utf-8')))
+          print('Inline JS bytes:',len(inline.encode('utf-8')))
+          PY
+          node --check /tmp/voidcut-inline.js
+
+      - name: Commit certification corrections
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "VD4 certification corrections already present"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- index.html
+          git commit -m "VD4: certify secondary screen presentation"
+          git push origin HEAD:chatgpt/vd4-secondary-screens-reconstruction
