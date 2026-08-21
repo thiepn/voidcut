@@ -377,6 +377,7 @@ html[data-vc-theme="mono"] {
 .vc-object {
   position: relative;
   background: var(--vc-surface-raised);
+  color: var(--vc-ink);
   border: var(--vc-line-1) solid var(--vc-line-strong);
   border-radius: var(--vc-radius-1);
   box-shadow: var(--vc-shadow-contact);
