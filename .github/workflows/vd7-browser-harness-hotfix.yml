@@ -1,0 +1,38 @@
+name: VD7 browser harness hotfix
+
+on:
+  push:
+    branches:
+      - chatgpt/vd7-theme-responsive-certification
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/vd7-theme-responsive-certification
+      - name: Keep Playwright test module in repository resolution scope
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/vd7-certify.yml')
+          t=p.read_text(encoding='utf-8')
+          new=t.replace('/tmp/vd7-browser.mjs','vd7-browser.mjs')
+          if new==t:
+            print('Browser harness path already corrected')
+          else:
+            p.write_text(new,encoding='utf-8')
+          PY
+          if git diff --quiet -- .github/workflows/vd7-certify.yml; then
+            echo "No harness update needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- .github/workflows/vd7-certify.yml
+          git commit -m "VD7: fix browser certification module scope"
+          git push origin HEAD:chatgpt/vd7-theme-responsive-certification
