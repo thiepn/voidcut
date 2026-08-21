@@ -77,8 +77,8 @@ jobs:
 
       - name: Confirm VD7 certified product blobs are unchanged
         run: |
-          test "$(git rev-parse chatgpt/vd7-theme-responsive-certification:index.html)" = "$(git rev-parse HEAD:index.html)"
-          test "$(git rev-parse chatgpt/vd7-theme-responsive-certification:design/voidcut-design-system.css)" = "$(git rev-parse HEAD:design/voidcut-design-system.css)"
+          test "$(git rev-parse HEAD:index.html)" = "8a8d8f2c21145cf9a53172e6bb1a900eae97b170"
+          test "$(git rev-parse HEAD:design/voidcut-design-system.css)" = "29456237edb9fb2a3cefd30157bc5729a3ffed04"
           echo "VD7 certified product blobs unchanged"
 
       - name: Install Chromium runtime
@@ -165,8 +165,6 @@ jobs:
           if(offline.title!=='VOIDCUT'||offline.phase!=='VD7'||!offline.controller||!offline.menuVisible) throw new Error('offline boot contract failed: '+JSON.stringify(offline));
           await context.setOffline(false);
 
-          // Update behavior: create a second worker revision with a distinct cache version.
-          // It must install into a separate cache and WAIT until the app explicitly sends SKIP_WAITING.
           const originalSW=fs.readFileSync('sw.js','utf8');
           const updatedSW=originalSW.replace("6.0.0-pwa1","6.0.0-pwa2-test");
           if(updatedSW===originalSW) throw new Error('could not construct test worker revision');
@@ -193,7 +191,6 @@ jobs:
           if(!applied.controller) throw new Error('updated worker failed to control page');
           if(applied.keys.includes('voidcut-shell-6.0.0-pwa1')||!applied.keys.includes('voidcut-shell-6.0.0-pwa2-test')) throw new Error('old cache cleanup failed: '+JSON.stringify(applied.keys));
 
-          // Restore checkout file only for cleanliness of the ephemeral runner.
           fs.writeFileSync('sw.js',originalSW);
 
           if(errors.length) throw new Error('browser errors: '+JSON.stringify(errors));
