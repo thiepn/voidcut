@@ -1632,6 +1632,21 @@ button:focus-visible,input:focus-visible,summary:focus-visible,[tabindex]:focus-
 #cosHeroArt.cos-hero-art::after{display:none!important;content:none!important;background:none!important;box-shadow:none!important;filter:none!important}
 #replayBadge::before{background:var(--vc-accent)!important;box-shadow:none!important;filter:none!important}
 
+/* VOIDCUT v6.0 — menu normalization after retired timed-run surface */
+@media(min-width:761px) and (min-height:621px){
+  #menu{grid-template-rows:auto auto auto auto auto auto auto!important}
+  #menu>.menu-grid{grid-row:6!important}
+  #menu .hint{grid-row:7!important}
+}
+@media(min-width:761px) and (max-width:1100px) and (min-height:621px) and (max-height:820px){
+  #menu{grid-template-rows:48px auto auto auto auto 62px!important}
+  #menu>.menu-stage{grid-row:2/6!important}
+  #menu>.menu-grid{grid-row:6!important}
+}
+@media(orientation:landscape) and (min-width:760px) and (max-height:620px){
+  #menu>.menu-grid{grid-column:1/-1!important;grid-row:6!important}
+}
+
 </style>
 
 <link rel="stylesheet" href="./design/voidcut-design-system.css" />
