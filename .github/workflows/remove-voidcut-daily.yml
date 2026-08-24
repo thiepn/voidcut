@@ -15,6 +15,25 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Remove residual Daily references
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          replacements = [
+              ('<span><small>DAILY</small><b>1</b></span>', ''),
+              ("||id==='daily'", ''),
+          ]
+          for old, new in replacements:
+              n = s.count(old)
+              if n != 1:
+                  raise SystemExit(f'Residual Daily reference expected once, found {n}: {old}')
+              s = s.replace(old, new)
+          p.write_text(s, encoding='utf-8')
+          print('Residual Daily references removed')
+          PY
+
       - name: Remove Daily product system
         run: python3 .github/remove_voidcut_daily.py
 
