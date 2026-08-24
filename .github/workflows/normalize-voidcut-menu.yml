@@ -1,0 +1,74 @@
+name: Normalize VOIDCUT menu after Daily removal
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  normalize-menu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalize menu grid
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          marker = '\n</style>'
+          if s.count(marker) != 1:
+              raise SystemExit('Expected one closing style tag')
+          patch = r'''
+/* VOIDCUT v6.0 — menu normalization after retired timed-run surface */
+@media(min-width:761px) and (min-height:621px){
+  #menu{grid-template-rows:auto auto auto auto auto auto auto!important}
+  #menu>.menu-grid{grid-row:6!important}
+  #menu .hint{grid-row:7!important}
+}
+@media(min-width:761px) and (max-width:1100px) and (min-height:621px) and (max-height:820px){
+  #menu{grid-template-rows:48px auto auto auto auto 62px!important}
+  #menu>.menu-stage{grid-row:2/6!important}
+  #menu>.menu-grid{grid-row:6!important}
+}
+@media(orientation:landscape) and (min-width:760px) and (max-height:620px){
+  #menu>.menu-grid{grid-column:1/-1!important;grid-row:6!important}
+}
+'''
+          if 'menu normalization after retired timed-run surface' in s:
+              raise SystemExit('Normalization patch already present')
+          s = s.replace(marker, patch + marker)
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Validate source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s = Path('index.html').read_text(encoding='utf-8')
+          blocks = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', s, re.S | re.I)
+          Path('/tmp/voidcut-inline.js').write_text('\n'.join(blocks), encoding='utf-8')
+          live = s[s.index('</style>'):]
+          if re.search(r'daily', live, re.I):
+              raise SystemExit('Live Daily HTML/JS reference returned')
+          ids = re.findall(r'\bid="([^"]+)"', s)
+          dup = sorted({x for x in ids if ids.count(x) > 1})
+          if dup:
+              raise SystemExit('Duplicate IDs: ' + ', '.join(dup))
+          print('Menu/source validation PASS')
+          PY
+          node --check /tmp/voidcut-inline.js
+
+      - name: Commit normalized menu
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/normalize-voidcut-menu.yml
+          git add index.html
+          git commit -m "Normalize menu after Daily removal"
+          git push
