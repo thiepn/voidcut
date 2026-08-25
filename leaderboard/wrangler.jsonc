@@ -5,9 +5,6 @@
   "compatibility_date": "2026-08-25",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "routes": [
-    { "pattern": "voidcut-api.thiepn.dev", "custom_domain": true }
-  ],
   "d1_databases": [
     { "binding": "DB" }
   ],
