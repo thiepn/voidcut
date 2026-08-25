@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "voidcut-leaderboard",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "voidcut-api.thiepn.dev", "custom_domain": true }
+  ],
+  "d1_databases": [
+    { "binding": "DB" }
+  ],
+  "r2_buckets": [
+    { "binding": "REPLAYS" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "VERIFIER", "class_name": "ReplayVerifier" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ReplayVerifier"] }
+  ],
+  "ratelimits": [
+    { "name": "PROFILE_LIMIT", "namespace_id": "6101", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RUN_LIMIT", "namespace_id": "6102", "simple": { "limit": 40, "period": 60 } },
+    { "name": "SUBMIT_LIMIT", "namespace_id": "6103", "simple": { "limit": 20, "period": 60 } }
+  ]
+}
