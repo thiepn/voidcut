@@ -2191,7 +2191,7 @@ function verifyCompetitiveReplay(r){if(!competitiveEligible(r))return null;const
 function rankCompetitiveRuns(entries){const unique=new Map;for(const e of entries||[]){if(!e||!verifyCompetitiveReplay(e.replay))continue;const old=unique.get(e.replay.hash);if(!old||e.recordedAt<old.recordedAt)unique.set(e.replay.hash,e)}return[...unique.values()].sort((a,b)=>b.replay.score-a.replay.score||b.replay.chamber-a.replay.chamber||a.replay.deathTime-b.replay.deathTime||a.recordedAt-b.recordedAt||a.replay.hash.localeCompare(b.replay.hash)).slice(0,10)}
 function addCompetitiveRun(r){const a=verifyCompetitiveReplay(r);if(!a)return null;save.competitiveRuns=rankCompetitiveRuns([...(save.competitiveRuns||[]),{replay:r,recordedAt:Date.now()}]);const i=save.competitiveRuns.findIndex(e=>e.replay.hash===r.hash);return i>=0?i+1:null}
 // === V6.1 GLOBAL LEADERBOARD ==============================================
-const LEADERBOARD_API='https://voidcut-api.thiepn.dev';
+const LEADERBOARD_API='https://voidcut-leaderboard.thiepn.workers.dev';
 const LEADERBOARD_IDENTITY_KEY='voidcut.leaderboard.identity.v1';
 let leaderboardTicket=null,leaderboardTicketPromise=null,activeLeaderboardTicket=null,pendingLeaderboardSubmission=null;
 function loadLeaderboardIdentity(){try{const x=JSON.parse(localStorage.getItem(LEADERBOARD_IDENTITY_KEY)||'null');return x&&typeof x.playerId==='string'&&typeof x.token==='string'&&typeof x.name==='string'?x:null}catch{return null}}
