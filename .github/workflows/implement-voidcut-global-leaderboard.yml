@@ -1,3 +1,4 @@
+# verifier retry: isolate deterministic variable declarators
 name: Implement VOIDCUT global leaderboard
 
 on:
