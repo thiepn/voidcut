@@ -1,0 +1,93 @@
+name: Deploy VOIDCUT leaderboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'leaderboard/**'
+      - '.github/workflows/deploy-voidcut-leaderboard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: gate
+        name: Check v6.1 frontend contract
+        run: |
+          if grep -q 'voidcut-build" content="6.1.0' index.html && grep -q 'voidcut-replay-version" content="9' index.html; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Leaderboard deploy skipped until the v6.1 frontend patch lands." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: leaderboard
+        run: npm install --no-audit --no-fund
+
+      - name: Generate deterministic verifier
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: leaderboard
+        run: |
+          npm run build:verifier
+          node --check src/generated-verifier.js
+          node --check src/index.js
+
+      - name: Validate Worker bundle
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: leaderboard
+        run: npx wrangler deploy --dry-run --outdir /tmp/voidcut-worker-build
+
+      - id: auth
+        name: Check Cloudflare deployment credential
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Backend build passed, but deployment is waiting for repository secret CLOUDFLARE_API_TOKEN." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Deploy Worker, D1, R2 and verifier Durable Object
+        if: steps.gate.outputs.ready == 'true' && steps.auth.outputs.deploy == 'true'
+        working-directory: leaderboard
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
+
+      - name: Smoke test public API
+        if: steps.gate.outputs.ready == 'true' && steps.auth.outputs.deploy == 'true'
+        run: |
+          python3 - <<'PY'
+          import json, time, urllib.request
+          url='https://voidcut-api.thiepn.dev/health'
+          last=None
+          for _ in range(12):
+              try:
+                  with urllib.request.urlopen(url, timeout=10) as r:
+                      data=json.load(r)
+                  if data.get('ok') and data.get('ruleset',{}).get('replay')==9:
+                      print('VOIDCUT leaderboard API health PASS')
+                      raise SystemExit(0)
+                  last=data
+              except Exception as e:
+                  last=e
+              time.sleep(5)
+          raise SystemExit(f'Leaderboard API health failed: {last}')
+          PY
