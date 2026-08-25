@@ -1,5 +1,5 @@
 // === V6.1 GLOBAL LEADERBOARD ==============================================
-const LEADERBOARD_API='https://voidcut-api.thiepn.dev';
+const LEADERBOARD_API='https://voidcut-leaderboard.thiepn.workers.dev';
 const LEADERBOARD_IDENTITY_KEY='voidcut.leaderboard.identity.v1';
 let leaderboardTicket=null,leaderboardTicketPromise=null,activeLeaderboardTicket=null,pendingLeaderboardSubmission=null;
 function loadLeaderboardIdentity(){try{const x=JSON.parse(localStorage.getItem(LEADERBOARD_IDENTITY_KEY)||'null');return x&&typeof x.playerId==='string'&&typeof x.token==='string'&&typeof x.name==='string'?x:null}catch{return null}}
