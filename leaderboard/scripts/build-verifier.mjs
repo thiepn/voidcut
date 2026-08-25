@@ -69,7 +69,11 @@ while (queue.length) {
 const ordered = [...selected].sort((a, b) => a.node.start - b.node.start);
 const generated = `// GENERATED FILE. DO NOT EDIT.\n// Extracted from VOIDCUT index.html so server verification uses the exact game simulation.\n\n${ordered.map(x => x.source).join('\n\n')}\n\nconst VC_GRADE_ORDER={D:0,C:1,B:2,A:3,S:4,'S+':5};\nexport function verifyReplay(replay){\n  if(!replay||replay.version!==9||(replay.arenaGeneration||2)!==2||(replay.directorGeneration||6)!==6)return null;\n  const analysis=analyzeReplayData(replay);\n  if(!analysis?.verified)return null;\n  let bestGrade=null;\n  for(const cut of analysis.cuts||[]){\n    const g=cut?.grade;\n    if(g&&(!bestGrade||(VC_GRADE_ORDER[g]??-1)>(VC_GRADE_ORDER[bestGrade]??-1)))bestGrade=g;\n  }\n  return Object.freeze({score:replay.score,chamber:replay.chamber,deathTime:replay.deathTime,hash:replay.hash,cuts:(analysis.cuts||[]).length,bestGrade});\n}\n`;
 const forbidden = [/\bdocument\b/, /\bwindow\b/, /\blocalStorage\b/, /\bnavigator\b/, /\bcanvas\b/, /\bgetContext\b/];
-for (const re of forbidden) if (re.test(generated)) throw new Error(`Generated verifier unexpectedly depends on browser API: ${re}`);
+for (const re of forbidden) {
+  if (!re.test(generated)) continue;
+  const culprits = ordered.filter(entry => re.test(entry.source)).map(entry => entry.names.join(',') || entry.node.type);
+  throw new Error(`Generated verifier unexpectedly depends on browser API: ${re}; declarations: ${culprits.join(' | ')}`);
+}
 fs.mkdirSync(path.dirname(output), { recursive: true });
 fs.writeFileSync(output, generated);
 console.log(`Generated verifier with ${ordered.length} top-level declarations (${generated.length.toLocaleString()} bytes).`);
