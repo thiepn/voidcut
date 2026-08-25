@@ -1,5 +1,5 @@
 const VOIDCUT_CACHE_PREFIX = 'voidcut-shell-';
-const VOIDCUT_CACHE_VERSION = '6.0.0-pwa5';
+const VOIDCUT_CACHE_VERSION = '6.1.0-pwa1';
 const VOIDCUT_CACHE = `${VOIDCUT_CACHE_PREFIX}${VOIDCUT_CACHE_VERSION}`;
 const VOIDCUT_SCOPE = self.registration.scope;
 
