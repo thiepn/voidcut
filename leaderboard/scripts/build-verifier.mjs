@@ -31,15 +31,24 @@ function namesFromPattern(pattern, out = []) {
   return out;
 }
 for (const node of body) {
-  let names = [];
   if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') {
-    if (node.id?.name) names = [node.id.name];
-  } else if (node.type === 'VariableDeclaration') {
-    for (const d of node.declarations) names.push(...namesFromPattern(d.id));
-  } else continue;
-  const entry = { node, names, source: source.slice(node.start, node.end) };
-  nodes.push(entry);
-  for (const name of names) declByName.set(name, entry);
+    const names = node.id?.name ? [node.id.name] : [];
+    const entry = { node, names, source: source.slice(node.start, node.end) };
+    nodes.push(entry);
+    for (const name of names) declByName.set(name, entry);
+    continue;
+  }
+  if (node.type === 'VariableDeclaration') {
+    // Split multi-declarator statements. A deterministic constant can otherwise
+    // drag an unrelated browser-only initializer (window/document/canvas) into
+    // the server verifier simply because both happened to share one `const`.
+    for (const d of node.declarations) {
+      const names = namesFromPattern(d.id);
+      const entry = { node: d, names, source: `${node.kind} ${source.slice(d.start, d.end)};` };
+      nodes.push(entry);
+      for (const name of names) declByName.set(name, entry);
+    }
+  }
 }
 
 const roots = ['analyzeReplayData'];
