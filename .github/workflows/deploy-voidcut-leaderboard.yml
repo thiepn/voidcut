@@ -1,3 +1,4 @@
+# deployment retry after Cloudflare API token setup
 name: Deploy VOIDCUT leaderboard
 
 on:
