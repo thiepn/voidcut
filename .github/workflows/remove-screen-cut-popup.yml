@@ -32,14 +32,11 @@ jobs:
           if s.count(dom)!=1:
               raise SystemExit(f'Expected one screenCutFx DOM node, found {s.count(dom)}')
           s=s.replace(dom,'',1)
-
           s=s.replace('let screenCutTimer=0,rankUpTimer=0;','let rankUpTimer=0;',1)
           s=s.replace('function screenCutTransition(){/* intentionally disabled: navigation should not flash a center-screen overlay */}\n','',1)
           s=re.sub(r"screenCutTransition\('[^']+'\);",'',s)
-
           if 'screenCutFx' in s or 'screenCutTransition(' in s or 'screenCutTimer' in s:
               raise SystemExit('Screen-cut runtime references remain after removal')
-
           p.write_text(s,encoding='utf-8')
 
           sw=Path('sw.js')
@@ -55,45 +52,8 @@ jobs:
               raise SystemExit('Service-worker install anchor missing')
           w=w.replace(install,install_new,1)
 
-          nav_old="""  if (request.mode === 'navigate') {
-    event.respondWith((async () => {
-      const cache = await caches.open(VOIDCUT_CACHE);
-      const cached = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });
-      if (cached) return cached;
-
-      try {
-        const response = await fetch(request);
-        if (response && response.ok) {
-          await cache.put(VOIDCUT_INDEX_URL, response.clone());
-        }
-        return response;
-      } catch (error) {
-        const fallback = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });
-        if (fallback) return fallback;
-        throw error;
-      }
-    })());
-    return;
-  }
-"""
-          nav_new="""  if (request.mode === 'navigate') {
-    event.respondWith((async () => {
-      const cache = await caches.open(VOIDCUT_CACHE);
-      try {
-        const response = await fetch(request, { cache: 'no-store' });
-        if (response && response.ok) {
-          await cache.put(VOIDCUT_INDEX_URL, response.clone());
-        }
-        return response;
-      } catch (error) {
-        const fallback = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });
-        if (fallback) return fallback;
-        throw error;
-      }
-    })());
-    return;
-  }
-"""
+          nav_old="  if (request.mode === 'navigate') {\n    event.respondWith((async () => {\n      const cache = await caches.open(VOIDCUT_CACHE);\n      const cached = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });\n      if (cached) return cached;\n\n      try {\n        const response = await fetch(request);\n        if (response && response.ok) {\n          await cache.put(VOIDCUT_INDEX_URL, response.clone());\n        }\n        return response;\n      } catch (error) {\n        const fallback = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });\n        if (fallback) return fallback;\n        throw error;\n      }\n    })());\n    return;\n  }\n"
+          nav_new="  if (request.mode === 'navigate') {\n    event.respondWith((async () => {\n      const cache = await caches.open(VOIDCUT_CACHE);\n      try {\n        const response = await fetch(request, { cache: 'no-store' });\n        if (response && response.ok) {\n          await cache.put(VOIDCUT_INDEX_URL, response.clone());\n        }\n        return response;\n      } catch (error) {\n        const fallback = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });\n        if (fallback) return fallback;\n        throw error;\n      }\n    })());\n    return;\n  }\n"
           if nav_old not in w:
               raise SystemExit('Service-worker navigation strategy anchor missing')
           w=w.replace(nav_old,nav_new,1)
