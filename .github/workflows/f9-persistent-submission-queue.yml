@@ -1,0 +1,100 @@
+name: F9 persistent leaderboard submission queue
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f9-persistent-submission-queue.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F9 persistent queue patch
+        run: python3 leaderboard/scripts/f9-fix-persistent-submission-queue.py
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs ../index.html
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Run F9 persistent queue regression
+        working-directory: leaderboard
+        run: node scripts/test-persistent-submission-queue-source.mjs
+
+      - name: Mark F9 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old='| VC-009 | MEDIUM | Only one in-memory pending leaderboard submission is retained; later runs/reloads/network failure can lose a valid submission. | F9 | FIXED — VERIFYING |'
+          new='| VC-009 | MEDIUM | Only one in-memory pending leaderboard submission is retained; later runs/reloads/network failure can lose a valid submission. | F9 | FIXED — F9 PASS |'
+          if s.count(old)!=1:
+              raise SystemExit('VC-009 verification status marker missing')
+          s=s.replace(old,new,1)
+          s += '''\n### F9 verification evidence\n\n- Two distinct ranked ticket/replay pairs coexist in persistent storage without overwrite, and a simulated reload restores both.\n- Duplicate ticket IDs replace their own payload rather than duplicating or removing other queue entries.\n- Expired and malformed entries are pruned safely; corrupt queue JSON fails closed without preventing startup.\n- The 16-entry bound refuses overflow without evicting existing valid queued runs.\n- Persistent-write failure is surfaced while retaining the new entry in the current session for best-effort immediate submission.\n- Every ranked submission is enqueued before a network drain begins.\n- Queue draining is single-flight and sequential across all queued entries.\n- Success and terminal rejection remove only the handled ticket; 401 preserves queued work for identity recovery; 429/network/5xx preserve queued work for retry.\n- Online recovery, menu entry and profile creation all resume draining.\n- The obsolete `pendingLeaderboardSubmission` and direct `submitLeaderboardRun` paths are absent.\n- Inline runtime parses successfully, Worker syntax remains green, and permanent F1-F8 regressions remain green.\n\n**F9 disposition: PASS. VC-009 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F9 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f index.html leaderboard/client/global-leaderboard-runtime.js design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-ranked-start-ticket-source.mjs leaderboard/scripts/test-persistent-submission-queue-source.mjs
+          git diff --cached --check
+          git commit -m 'F9: persist leaderboard submission queue'
+          git push origin HEAD:fix/v6.2-hardening
