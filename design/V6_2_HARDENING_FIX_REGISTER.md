@@ -50,7 +50,7 @@ Until final certification:
 | ID | Severity | Defect | Planned phase | Status |
 |---|---|---|---|---|
 | VC-001 | CRITICAL | Replay verifier treats timestamps as not-before times, allowing stale/queued cuts to execute later with zero input delay. | F1 | FIXED — F1 PASS |
-| VC-002 | CRITICAL | Ranked runs can be manually paused or lifecycle-paused without losing leaderboard eligibility. | F2 | OPEN |
+| VC-002 | CRITICAL | Ranked runs can be manually paused or lifecycle-paused without losing leaderboard eligibility. | F2 | FIXED — F2 PASS |
 | VC-003 | CRITICAL | Main-loop frame-gap clamping can create a slow-motion competitive advantage under throttling/stalls. | F3 | OPEN |
 | VC-004 | HIGH | Replay verifier lacks a hard maximum simulation duration/step budget and can be forced into excessive CPU work. | F4 | OPEN |
 | VC-005 | HIGH | Global replay retrieval lowercases hashes but validates with an uppercase-only hexadecimal regex. | F5 | OPEN |
@@ -135,3 +135,28 @@ F1 changes are limited to replay timing integrity and regression coverage; gamep
 - Generated verifier and Worker source pass Node syntax checks.
 
 **F1 disposition: PASS. VC-001 closed.**
+
+## F2 implementation record — ranked pause invalidation
+
+- Global leaderboard eligibility is now fail-closed on the first pause of a ticketed standard PLAY run.
+- Manual pause, keyboard pause, pause-button use, browser/app suspension, tab visibility loss, pagehide/freeze, and significant display-change pauses all converge on the same invalidation path.
+- Invalidation immediately discards the active leaderboard ticket, so the completed replay cannot enter the submission queue.
+- The run remains playable locally after invalidation; local records, replay export, progression and retry behavior are preserved.
+- Tutorial, challenge and replay pause behavior is unchanged because they never own a global leaderboard ticket.
+- Each new standard run resets the invalidation state and may use a fresh prefetched ticket normally.
+- The pause sheet and final result explicitly disclose when the current run became unranked.
+
+F2 changes are limited to leaderboard eligibility around pause/lifecycle interruption. Simulation timing hardening remains reserved for F3.
+
+### F2 verification evidence
+
+- Inline runtime JavaScript parses successfully after ranked-pause hardening.
+- Manual pause invalidates the active global leaderboard ticket before pause state is committed.
+- Lifecycle suspension routes through the same invalidation path with an explicit APP SUSPENDED reason.
+- Significant display-change pause routes through the same invalidation path.
+- Tutorial/non-play/already-unranked cases do not destroy unrelated tickets.
+- New runs reset invalidation state and preserve normal fresh-ticket behavior.
+- Result and pause UI expose the unranked state.
+- F1 replay timestamp regression remains green.
+
+**F2 disposition: PASS. VC-002 closed.**
