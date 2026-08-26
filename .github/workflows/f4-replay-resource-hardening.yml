@@ -1,0 +1,89 @@
+name: F4 replay resource hardening
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f4-replay-resource-hardening.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F4 source patch
+        run: python3 leaderboard/scripts/f4-harden-replay-resources.py
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
+          if(!scripts.length) throw new Error('No inline runtime found');
+          fs.writeFileSync('/tmp/voidcut-runtime.js',scripts.sort((a,b)=>b.length-a.length)[0]);
+          NODE
+          node --check /tmp/voidcut-runtime.js
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs ../index.html
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Build and validate generated verifier
+        working-directory: leaderboard
+        run: |
+          npm install
+          npm run build:verifier
+          npm run check
+          node --check src/generated-verifier.js
+          grep -F "COMPETITIVE_REPLAY_EVENT_LIMIT=12000" src/generated-verifier.js
+          grep -F "COMPETITIVE_REPLAY_MAX_DURATION=1800" src/generated-verifier.js
+          grep -F "COMPETITIVE_REPLAY_MAX_STEPS=216100" src/generated-verifier.js
+          grep -F "invalidReason='step-budget'" src/generated-verifier.js
+          grep -F "analyzeReplayData(replay,true)" src/generated-verifier.js
+
+      - name: Mark F4 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old='| VC-004 | HIGH | Replay verifier lacks a hard maximum simulation duration/step budget and can be forced into excessive CPU work. | F4 | FIXED — VERIFYING |'
+          new='| VC-004 | HIGH | Replay verifier lacks a hard maximum simulation duration/step budget and can be forced into excessive CPU work. | F4 | FIXED — F4 PASS |'
+          if s.count(old)!=1:
+              raise SystemExit('VC-004 verification status marker missing')
+          s=s.replace(old,new,1)
+          s += '''\n### F4 verification evidence\n\n- Inline runtime JavaScript parses after resource-budget hardening.\n- Competitive preflight accepts the exact 30-minute / 12,000-event boundary and rejects values above either ceiling.\n- Local/legacy replay validation retains its broader compatibility envelope.\n- Competitive analyzer contains an independent 216,100-step fail-safe checked before each deterministic simulation update.\n- Leaderboard request ingestion is capped at 2.5 MB and chunked bodies are byte-counted/cancelled while streaming.\n- Worker structural resource preflight runs before deterministic verification.\n- Generated server verifier explicitly invokes competitive analyzer mode and contains the same event, duration and step ceilings.\n- Generated verifier and Worker source pass Node syntax checks.\n- F1, F2 and F3 permanent regressions remain green.\n\n**F4 disposition: PASS. VC-004 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F4 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f index.html leaderboard/src/index.js leaderboard/scripts/build-verifier.mjs design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-replay-resource-limits-source.mjs
+          git diff --cached --check
+          git commit -m 'F4: bound replay verification resources'
+          git push origin HEAD:fix/v6.2-hardening
