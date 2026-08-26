@@ -70,3 +70,5 @@ jobs:
           git diff --cached --check
           git commit -m 'F3: invalidate ranked runs on timing drift'
           git push origin HEAD:fix/v6.2-hardening
+
+# rerun: behavior-focused F2 regression
