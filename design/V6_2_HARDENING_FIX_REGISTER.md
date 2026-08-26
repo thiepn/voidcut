@@ -55,7 +55,7 @@ Until final certification:
 | VC-004 | HIGH | Replay verifier lacks a hard maximum simulation duration/step budget and can be forced into excessive CPU work. | F4 | FIXED — F4 PASS |
 | VC-005 | HIGH | Global replay retrieval lowercases hashes but validates with an uppercase-only hexadecimal regex. | F5 | FIXED — F5 PASS |
 | VC-006 | HIGH | Anonymous rate-limit identity uses IP + attacker-controlled User-Agent and is trivially splittable. | F6 | FIXED — F6 PASS |
-| VC-007 | HIGH | Turnstile backend enforcement is implemented without matching client token acquisition/submission. | F7 | OPEN |
+| VC-007 | HIGH | Turnstile backend enforcement is implemented without matching client token acquisition/submission. | F7 | FIXED — F7 PASS |
 | VC-008 | MEDIUM | PLAY can consume no leaderboard ticket if asynchronous prefetch has not completed, silently starting an unranked run. | F8 | OPEN |
 | VC-009 | MEDIUM | Only one in-memory pending leaderboard submission is retained; later runs/reloads/network failure can lose a valid submission. | F9 | OPEN |
 | VC-010 | MEDIUM | Profile creation ignores failure to persist/read back local leaderboard identity, potentially orphaning the username/token relationship. | F10 | OPEN |
@@ -262,3 +262,24 @@ F6 changes only anonymous rate-limit identity construction; authentication token
 - Worker syntax, F4 replay-resource regression and F5 replay-hash regression remain green.
 
 **F6 disposition: PASS. VC-006 closed.**
+
+## F7 implementation record — remove incomplete Turnstile contract
+
+- The dormant Cloudflare Turnstile verification helper and conditional profile-creation gate have been removed from the leaderboard Worker.
+- The shipped client never loaded Turnstile, had no site key/widget/token acquisition path, and submitted profile creation as `{name}` only; retaining a backend-only optional requirement could therefore make legitimate profile creation fail whenever deployment configuration enabled it.
+- F7 deliberately chooses removal rather than adding a new third-party runtime dependency, site-key contract and secret-management requirement late in the hardening cycle.
+- Anonymous abuse protection remains provided by F6's server-controlled `CF-Connecting-IP` rate-limit identity and the existing Cloudflare PROFILE/RUN limiter bindings.
+- Authenticated submission throttling, replay verification and leaderboard identity tokens are unchanged.
+- No client UI, gameplay, scoring, save schema, replay format or release metadata changed.
+
+If Turnstile is introduced in a future release, it must be implemented as an explicit end-to-end client/server feature with deployment configuration and regression coverage rather than as a dormant backend switch.
+
+### F7 verification evidence
+
+- Worker contains no dormant Turnstile helper, environment switch, secret lookup, token field, siteverify URL or `human-check-failed` response path.
+- Shipped client and source client remain consistent: profile creation sends only the public name and contains no partial Turnstile widget/token integration.
+- Profile creation still enforces F6 anonymous network rate limiting, name validation, opaque token creation/hash storage and D1 persistence.
+- PROFILE/RUN/SUBMIT Cloudflare limiter quotas remain unchanged.
+- Worker syntax and permanent F1-F6 regressions remain green.
+
+**F7 disposition: PASS. VC-007 closed.**

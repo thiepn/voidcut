@@ -142,18 +142,6 @@ async function readBoundedText(request, maxBytes) {
     throw err;
   }
 }
-async function checkTurnstile(request, env, token) {
-  if (env.TURNSTILE_REQUIRED !== '1') return true;
-  if (!env.TURNSTILE_SECRET || !token) return false;
-  const form = new FormData();
-  form.set('secret', env.TURNSTILE_SECRET);
-  form.set('response', token);
-  const ip = request.headers.get('CF-Connecting-IP');
-  if (ip) form.set('remoteip', ip);
-  const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form });
-  const data = await res.json();
-  return data?.success === true;
-}
 function preauthKey(request) {
   const ip = String(request.headers.get('CF-Connecting-IP') || '').trim();
   return `ip:${ip || 'unknown'}`;
@@ -181,7 +169,6 @@ async function createProfile(request, env) {
   try { body = await readJson(request); } catch { return error(request, 400, 'invalid-body', 'Invalid profile request.'); }
   const name = cleanName(body.name);
   if (!name) return error(request, 400, 'invalid-name', 'Use 3–16 letters, numbers, spaces, underscores or hyphens.');
-  if (!(await checkTurnstile(request, env, body.turnstileToken))) return error(request, 403, 'human-check-failed', 'Human verification failed.');
   const id = crypto.randomUUID();
   const token = randomToken();
   const tokenHash = await sha256(token);
