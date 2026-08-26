@@ -422,15 +422,15 @@ export default {
     try {
       await ensureSchema(env);
       if (request.method === 'GET' && url.pathname === '/health') return json(request, { ok: true, service: 'voidcut-leaderboard', ruleset: RULESET });
-      if (request.method === 'POST' && url.pathname === '/profile/create') return createProfile(request, env);
-      if (request.method === 'POST' && url.pathname === '/run/start') return startRun(request, env);
+      if (request.method === 'POST' && url.pathname === '/profile/create') return await createProfile(request, env);
+      if (request.method === 'POST' && url.pathname === '/run/start') return await startRun(request, env);
       if (request.method === 'POST' && url.pathname.startsWith('/run/submit/')) {
         const ticketId = url.pathname.slice('/run/submit/'.length);
         if (!/^[0-9a-f-]{36}$/i.test(ticketId)) return error(request, 400, 'invalid-ticket', 'Invalid run ticket.');
-        return forwardSubmission(request, env, ticketId);
+        return await forwardSubmission(request, env, ticketId);
       }
-      if (request.method === 'GET' && url.pathname === '/leaderboard') return leaderboard(request, env);
-      if (request.method === 'GET' && url.pathname.startsWith('/replay/')) return replayResponse(request, env, url.pathname.slice('/replay/'.length).toLowerCase());
+      if (request.method === 'GET' && url.pathname === '/leaderboard') return await leaderboard(request, env);
+      if (request.method === 'GET' && url.pathname.startsWith('/replay/')) return await replayResponse(request, env, url.pathname.slice('/replay/'.length).toLowerCase());
       return error(request, 404, 'not-found', 'Unknown leaderboard endpoint.');
     } catch (err) {
       console.error('VOIDCUT leaderboard error', err);

@@ -63,7 +63,7 @@ Until final certification:
 | VC-012 | LOW | Exact-tie self-rank calculation omits the final player-ID tie-break used by leaderboard ordering. | F11 | FIXED — F11 PASS |
 | VC-013 | MEDIUM | Expired/rejected/used run tickets have no retention cleanup and accumulate indefinitely. | F12 | FIXED — F12 PASS |
 | VC-014 | LOW | Concurrent personal-best updates can leave obsolete/orphaned R2 replay objects. | F12 | FIXED — F12 PASS |
-| VC-015 | MEDIUM | Top-level Worker route try/catch does not await async route handlers consistently, weakening controlled error handling. | F13 | OPEN |
+| VC-015 | MEDIUM | Top-level Worker route try/catch does not await async route handlers consistently, weakening controlled error handling. | F13 | FIXED — F13 PASS |
 | VC-016 | HIGH | Service worker can cache an arbitrary successful same-scope navigation response under the canonical `index.html` shell key. | F14 | OPEN |
 | VC-017 | MEDIUM | `skipWaiting()` automatic activation conflicts with UI logic that expects a waiting service worker for manual update activation. | F15 | OPEN |
 | VC-018 | MEDIUM | Cache freshness for core design assets relies on manually changing the SW cache revision; mixed old/new assets are possible after an incomplete release update. | F16 | OPEN |
@@ -427,3 +427,22 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Wrangler declares the 15-minute Cron Trigger and the Worker exports the matching scheduled maintenance handler.
 
 **F12 disposition: PASS. VC-013 and VC-014 closed.**
+
+## F13 implementation record — awaited top-level Worker route boundary
+
+- Every asynchronous route handler dispatched from the top-level Worker `fetch()` try/catch is now returned with `return await`, so a handler rejection is observed while execution is still inside the controlled error boundary.
+- The affected routes are `/profile/create`, `/run/start`, `/run/submit/:ticket`, `/leaderboard`, and `/replay/:hash`.
+- Synchronous health, OPTIONS, validation, 404 and error-response branches remain direct returns.
+- The F12 scheduled maintenance handler already awaited `ensureSchema()` and `runLeaderboardMaintenance()` inside its own try/catch and was not changed.
+- Route URLs, HTTP status codes, successful response payloads, authentication, rate limits, ticket semantics, D1/R2 logic, ranking, replay verification, save schema, gameplay and UI behavior are unchanged.
+
+### F13 verification evidence
+
+- All five async top-level route handlers are declared async and are dispatched with `return await` from inside the Worker fetch try/catch.
+- No bare top-level returns remain for profile creation, run start, submission forwarding, leaderboard retrieval or replay retrieval.
+- A regression harness demonstrates the language-level distinction directly: a rejecting async handler is caught with `return await` and escapes with a bare `return`.
+- The controlled catch still logs the Worker error and returns the existing 500 `server-error` response.
+- F12 scheduled maintenance retains its own awaited try/catch boundary.
+- Worker and inline runtime syntax pass, and permanent F1-F12 regressions remain green.
+
+**F13 disposition: PASS. VC-015 closed.**
