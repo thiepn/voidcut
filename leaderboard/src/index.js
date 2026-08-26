@@ -3,6 +3,10 @@ import { verifyReplay } from './generated-verifier.js';
 
 const RULESET = Object.freeze({ build: '6.1.0', replay: 9, arena: 2, director: 6 });
 const TICKET_TTL_MS = 6 * 60 * 60 * 1000;
+const TICKET_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const TICKET_CLEANUP_BATCH = 500;
+const REPLAY_GC_GRACE_MS = 24 * 60 * 60 * 1000;
+const REPLAY_GC_BATCH = 50;
 const MAX_REPLAY_BYTES = 2_500_000;
 const MAX_COMPETITIVE_EVENTS = 12_000;
 const MAX_COMPETITIVE_DURATION = 1_800;
@@ -47,6 +51,19 @@ function ensureSchema(env) {
         FOREIGN KEY(player_id) REFERENCES players(id)
       )`),
       env.DB.prepare('CREATE INDEX IF NOT EXISTS run_tickets_expiry_idx ON run_tickets(expires_at)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS run_tickets_used_idx ON run_tickets(used_at)'),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS replay_gc_queue (
+        hash TEXT PRIMARY KEY,
+        queued_at INTEGER NOT NULL
+      )`),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS replay_gc_queue_age_idx ON replay_gc_queue(queued_at)'),
+      env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS players_queue_displaced_replay
+        AFTER UPDATE OF best_replay_hash ON players
+        WHEN OLD.best_replay_hash IS NOT NULL AND OLD.best_replay_hash <> NEW.best_replay_hash
+        BEGIN
+          INSERT INTO replay_gc_queue(hash,queued_at) VALUES(OLD.best_replay_hash,NEW.updated_at)
+          ON CONFLICT(hash) DO UPDATE SET queued_at=excluded.queued_at;
+        END`),
     ]).catch(err => {
       schemaPromise = null;
       throw err;
@@ -163,6 +180,54 @@ async function rankForPlayer(env, player) {
 async function playerSnapshot(env, id) {
   if (!id) return null;
   return env.DB.prepare('SELECT id,name,best_score,best_chamber,best_time,best_grade,best_replay_hash,updated_at FROM players WHERE id=? LIMIT 1').bind(id).first();
+}
+
+async function queueReplayForGc(env, hash, queuedAt = Date.now()) {
+  const replayHash = normalizeReplayHash(hash);
+  if (!replayHash) return false;
+  await env.DB.prepare(`INSERT INTO replay_gc_queue(hash,queued_at) VALUES(?,?)
+    ON CONFLICT(hash) DO UPDATE SET queued_at=excluded.queued_at`).bind(replayHash, Math.max(1, Math.floor(Number(queuedAt) || Date.now()))).run();
+  return true;
+}
+async function cleanupRunTickets(env, now = Date.now()) {
+  const cutoff = Math.max(0, Math.floor(Number(now) || Date.now()) - TICKET_RETENTION_MS);
+  const used = await env.DB.prepare(`DELETE FROM run_tickets WHERE id IN (
+    SELECT id FROM run_tickets WHERE used_at IS NOT NULL AND used_at < ? ORDER BY used_at ASC LIMIT ?
+  )`).bind(cutoff, TICKET_CLEANUP_BATCH).run();
+  const abandoned = await env.DB.prepare(`DELETE FROM run_tickets WHERE id IN (
+    SELECT id FROM run_tickets WHERE used_at IS NULL AND expires_at < ? ORDER BY expires_at ASC LIMIT ?
+  )`).bind(cutoff, TICKET_CLEANUP_BATCH).run();
+  return Number(used?.meta?.changes || 0) + Number(abandoned?.meta?.changes || 0);
+}
+async function cleanupReplayGc(env, now = Date.now()) {
+  const cutoff = Math.max(0, Math.floor(Number(now) || Date.now()) - REPLAY_GC_GRACE_MS);
+  const pending = await env.DB.prepare(`SELECT hash,queued_at FROM replay_gc_queue WHERE queued_at < ? ORDER BY queued_at ASC LIMIT ?`).bind(cutoff, REPLAY_GC_BATCH).all();
+  let deleted = 0, released = 0;
+  for (const row of pending.results || []) {
+    const replayHash = normalizeReplayHash(row?.hash), queuedAt = Number(row?.queued_at);
+    if (!replayHash || !Number.isFinite(queuedAt)) {
+      if (row?.hash != null) await env.DB.prepare('DELETE FROM replay_gc_queue WHERE hash=?').bind(String(row.hash)).run();
+      continue;
+    }
+    const current = await env.DB.prepare('SELECT queued_at FROM replay_gc_queue WHERE hash=? LIMIT 1').bind(replayHash).first();
+    if (Number(current?.queued_at) !== queuedAt) continue;
+    const owner = await env.DB.prepare('SELECT id FROM players WHERE best_replay_hash=? LIMIT 1').bind(replayHash).first();
+    if (owner) {
+      const drop = await env.DB.prepare('DELETE FROM replay_gc_queue WHERE hash=? AND queued_at=?').bind(replayHash, queuedAt).run();
+      released += Number(drop?.meta?.changes || 0);
+      continue;
+    }
+    await env.REPLAYS.delete(`verified/${replayHash}.json`);
+    const drop = await env.DB.prepare(`DELETE FROM replay_gc_queue WHERE hash=? AND queued_at=?
+      AND NOT EXISTS (SELECT 1 FROM players WHERE best_replay_hash=?)`).bind(replayHash, queuedAt, replayHash).run();
+    deleted += Number(drop?.meta?.changes || 0);
+  }
+  return { deleted, released };
+}
+async function runLeaderboardMaintenance(env, now = Date.now()) {
+  const ticketsDeleted = await cleanupRunTickets(env, now);
+  const replayGc = await cleanupReplayGc(env, now);
+  return { ticketsDeleted, replayGc };
 }
 
 async function createProfile(request, env) {
@@ -311,6 +376,7 @@ export class ReplayVerifier extends DurableObject {
 
     let personalBest = false;
     if (better) {
+      await queueReplayForGc(this.env, serverReplayHash, now);
       await this.env.REPLAYS.put(`verified/${serverReplayHash}.json`, JSON.stringify(replay), { httpMetadata: { contentType: 'application/json' } });
       const update = await this.env.DB.prepare(`UPDATE players SET best_score=?,best_chamber=?,best_time=?,best_grade=?,best_replay_hash=?,updated_at=?
         WHERE id=? AND (
@@ -321,8 +387,6 @@ export class ReplayVerifier extends DurableObject {
         .bind(official.score, official.chamber, official.deathTime, official.bestGrade, serverReplayHash, now, player.id,
           official.score, official.score, official.chamber, official.score, official.chamber, official.deathTime).run();
       personalBest = Number(update?.meta?.changes || 0) > 0;
-      if (!personalBest) await this.env.REPLAYS.delete(`verified/${serverReplayHash}.json`);
-      else if (old?.best_replay_hash && old.best_replay_hash !== serverReplayHash) this.ctx.waitUntil((async()=>{const refs=await this.env.DB.prepare('SELECT COUNT(*) AS n FROM players WHERE best_replay_hash=?').bind(old.best_replay_hash).first('n');if(Number(refs||0)===0)await this.env.REPLAYS.delete(`verified/${old.best_replay_hash}.json`)})());
     }
 
     await this.env.DB.prepare(`UPDATE run_tickets SET player_id=?,used_at=?,status='verified',result_score=?,result_chamber=?,result_time=?,result_grade=?,replay_hash=? WHERE id=? AND used_at IS NULL`)
@@ -371,6 +435,16 @@ export default {
     } catch (err) {
       console.error('VOIDCUT leaderboard error', err);
       return error(request, 500, 'server-error', 'Leaderboard service error.');
+    }
+  },
+  async scheduled(controller, env) {
+    try {
+      await ensureSchema(env);
+      const result = await runLeaderboardMaintenance(env, Number(controller?.scheduledTime) || Date.now());
+      console.log('VOIDCUT leaderboard maintenance', result);
+    } catch (err) {
+      console.error('VOIDCUT leaderboard maintenance error', err);
+      throw err;
     }
   },
 };

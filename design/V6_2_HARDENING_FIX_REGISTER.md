@@ -61,8 +61,8 @@ Until final certification:
 | VC-010 | MEDIUM | Profile creation ignores failure to persist/read back local leaderboard identity, potentially orphaning the username/token relationship. | F10 | FIXED — F10 PASS |
 | VC-011 | MEDIUM | Local best-replay selection does not use the same score/chamber/time ordering as the global leaderboard. | F11 | FIXED — F11 PASS |
 | VC-012 | LOW | Exact-tie self-rank calculation omits the final player-ID tie-break used by leaderboard ordering. | F11 | FIXED — F11 PASS |
-| VC-013 | MEDIUM | Expired/rejected/used run tickets have no retention cleanup and accumulate indefinitely. | F12 | OPEN |
-| VC-014 | LOW | Concurrent personal-best updates can leave obsolete/orphaned R2 replay objects. | F12 | OPEN |
+| VC-013 | MEDIUM | Expired/rejected/used run tickets have no retention cleanup and accumulate indefinitely. | F12 | FIXED — F12 PASS |
+| VC-014 | LOW | Concurrent personal-best updates can leave obsolete/orphaned R2 replay objects. | F12 | FIXED — F12 PASS |
 | VC-015 | MEDIUM | Top-level Worker route try/catch does not await async route handlers consistently, weakening controlled error handling. | F13 | OPEN |
 | VC-016 | HIGH | Service worker can cache an arbitrary successful same-scope navigation response under the canonical `index.html` shell key. | F14 | OPEN |
 | VC-017 | MEDIUM | `skipWaiting()` automatic activation conflicts with UI logic that expects a waiting service worker for manual update activation. | F15 | OPEN |
@@ -404,3 +404,26 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Inline runtime and Worker syntax pass, and permanent F1-F10 regressions remain green.
 
 **F11 disposition: PASS. VC-011 and VC-012 closed.**
+
+## F12 implementation record — ticket retention and replay-object garbage collection
+
+- Run tickets now have a seven-day retention window after terminal use or abandoned expiry. A scheduled maintenance pass deletes at most 500 old used tickets and 500 old never-used expired tickets per run, preventing unbounded D1 growth while preserving a generous retry/audit window.
+- `run_tickets.used_at` now has a dedicated cleanup index in addition to the existing expiry index.
+- The Worker now owns a D1 `replay_gc_queue` and a `players_queue_displaced_replay` SQLite trigger. Whenever a player's `best_replay_hash` actually changes, the trigger records the database row's true OLD replay hash, not the potentially stale JavaScript snapshot read before a concurrent PB update.
+- Every candidate replay that is about to be written to R2 is queued for garbage collection before the upload. This covers failed conditional PB updates and failures after an R2 write without immediately deleting an object that another profile could reference.
+- The old snapshot-based `old.best_replay_hash` background deletion and unconditional failed-PB candidate deletion have been removed. Those paths could miss an intermediate concurrent winner or delete a content-addressed object still referenced elsewhere.
+- Replay GC waits 24 hours, processes at most 50 candidates per scheduled run, re-checks the queue generation and live `players.best_replay_hash` references before deletion, deletes only unreferenced `verified/<sha256>.json` objects, and drops queue entries that remain legitimately referenced. A future displacement re-queues the hash transactionally through the trigger.
+- Wrangler now configures `*/15 * * * *` as the maintenance Cron Trigger, and the Worker exports a matching `scheduled()` handler.
+- No ticket TTL, replay format, verification rules, scoring, ranking, client queue, save schema, gameplay, or UI behavior changed in F12.
+
+### F12 verification evidence
+
+- Worker and inline runtime syntax remain valid, and permanent F1-F11 regressions remain green.
+- The F12 regression executes the actual D1 trigger SQL in SQLite and proves sequential PB replacements queue both the original best hash and an intermediate winner hash (`h0 → ha → hb` queues `h0` and `ha`). This models the stale-JavaScript-snapshot concurrency defect directly.
+- Every new R2 candidate is placed in `replay_gc_queue` before upload, so a failed conditional PB update or post-upload failure remains discoverable for later GC instead of depending on request-local cleanup.
+- Direct candidate/old-snapshot R2 deletions are absent.
+- Seven-day ticket-retention predicates delete stale used and abandoned-expired rows while preserving recent rows; the regression executes both cleanup statements against SQLite fixtures.
+- Replay GC has a 24-hour grace period, a 50-object batch bound, queue-generation recheck, and live player-reference check before R2 deletion. Referenced hashes have only their stale GC queue entry released.
+- Wrangler declares the 15-minute Cron Trigger and the Worker exports the matching scheduled maintenance handler.
+
+**F12 disposition: PASS. VC-013 and VC-014 closed.**
