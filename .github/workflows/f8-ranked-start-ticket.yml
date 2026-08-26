@@ -22,7 +22,9 @@ jobs:
           node-version: '22'
 
       - name: Apply F8 ranked-start patch
-        run: python3 leaderboard/scripts/f8-fix-ticket-start-race.py
+        run: |
+          python3 leaderboard/scripts/f8-fix-ticket-start-race.py
+          python3 leaderboard/scripts/f8-preserve-f2-reset.py
 
       - name: Validate inline runtime syntax
         run: |
@@ -82,7 +84,7 @@ jobs:
           if s.count(old)!=1:
               raise SystemExit('VC-008 verification status marker missing')
           s=s.replace(old,new,1)
-          s += '''\n### F8 verification evidence\n\n- A ready valid ticket is consumed immediately without issuing another ticket request.\n- If no ready ticket exists, standard PLAY awaits the existing/new prefetch rather than synchronously choosing a local seed.\n- A ticket that resolves inside the 2,000 ms start budget is consumed and its server seed remains authoritative for the ranked run.\n- A settled request with no ticket produces explicit `LEADERBOARD UNAVAILABLE` local-run status.\n- A ticket arriving after the bounded start budget cannot attach to the already-starting run; that run becomes explicitly local with `LEADERBOARD TIMEOUT`, while the late ticket may be reused only by a later run.\n- Repeated start attempts share one pending start promise, and navigation away prevents the async continuation from launching unexpectedly.\n- Standard mouse, keyboard, retry/restart and post-tutorial starts converge on the synchronized path; challenge starts remain outside global-ticket acquisition.\n- Inline runtime parses successfully, source-client and shipped acquisition helpers match, and F1-F7 permanent regressions remain green.\n\n**F8 disposition: PASS. VC-008 closed.**\n'''
+          s += '''\n### F8 verification evidence\n\n- A ready valid ticket is consumed immediately without issuing another ticket request.\n- If no ready ticket exists, standard PLAY awaits the existing/new prefetch rather than synchronously choosing a local seed.\n- A ticket that resolves inside the 2,000 ms start budget is consumed and its server seed remains authoritative for the ranked run.\n- A settled request with no ticket produces explicit `LEADERBOARD UNAVAILABLE` local-run status.\n- A ticket arriving after the bounded start budget cannot attach to the already-starting run; that run becomes explicitly local with `LEADERBOARD TIMEOUT`, while the late ticket may be reused only by a later run.\n- Repeated start attempts share one pending start promise, and navigation away prevents the async continuation from launching unexpectedly.\n- The F2 explicit new-run invalidation reset remains intact before any F8 local-start reason is applied.\n- Standard mouse, keyboard, retry/restart and post-tutorial starts converge on the synchronized path; challenge starts remain outside global-ticket acquisition.\n- Inline runtime parses successfully, source-client and shipped acquisition helpers match, and F1-F7 permanent regressions remain green.\n\n**F8 disposition: PASS. VC-008 closed.**\n'''
           p.write_text(s,encoding='utf-8')
           PY
 
