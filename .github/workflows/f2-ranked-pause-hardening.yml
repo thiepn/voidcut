@@ -1,0 +1,68 @@
+name: F2 ranked pause hardening
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f2-ranked-pause-hardening.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F2 source patch
+        run: python3 leaderboard/scripts/f2-harden-ranked-pause.py
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
+          if(!scripts.length) throw new Error('No inline runtime found');
+          fs.writeFileSync('/tmp/voidcut-runtime.js',scripts.sort((a,b)=>b.length-a.length)[0]);
+          NODE
+          node --check /tmp/voidcut-runtime.js
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Mark F2 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old='| VC-002 | CRITICAL | Ranked runs can be manually paused or lifecycle-paused without losing leaderboard eligibility. | F2 | FIXED — VERIFYING |'
+          new='| VC-002 | CRITICAL | Ranked runs can be manually paused or lifecycle-paused without losing leaderboard eligibility. | F2 | FIXED — F2 PASS |'
+          if s.count(old)!=1:
+              raise SystemExit('VC-002 verification status marker missing')
+          s=s.replace(old,new,1)
+          s += '''\n### F2 verification evidence\n\n- Inline runtime JavaScript parses successfully after ranked-pause hardening.\n- Manual pause invalidates the active global leaderboard ticket before pause state is committed.\n- Lifecycle suspension routes through the same invalidation path with an explicit APP SUSPENDED reason.\n- Significant display-change pause routes through the same invalidation path.\n- Tutorial/non-play/already-unranked cases do not destroy unrelated tickets.\n- New runs reset invalidation state and preserve normal fresh-ticket behavior.\n- Result and pause UI expose the unranked state.\n- F1 replay timestamp regression remains green.\n\n**F2 disposition: PASS. VC-002 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F2 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f index.html design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-ranked-pause-source.mjs
+          git diff --cached --check
+          git commit -m 'F2: invalidate ranked runs on pause'
+          git push origin HEAD:fix/v6.2-hardening
