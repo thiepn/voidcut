@@ -49,7 +49,7 @@ Until final certification:
 
 | ID | Severity | Defect | Planned phase | Status |
 |---|---|---|---|---|
-| VC-001 | CRITICAL | Replay verifier treats timestamps as not-before times, allowing stale/queued cuts to execute later with zero input delay. | F1 | OPEN |
+| VC-001 | CRITICAL | Replay verifier treats timestamps as not-before times, allowing stale/queued cuts to execute later with zero input delay. | F1 | FIXED — F1 PASS |
 | VC-002 | CRITICAL | Ranked runs can be manually paused or lifecycle-paused without losing leaderboard eligibility. | F2 | OPEN |
 | VC-003 | CRITICAL | Main-loop frame-gap clamping can create a slow-motion competitive advantage under throttling/stalls. | F3 | OPEN |
 | VC-004 | HIGH | Replay verifier lacks a hard maximum simulation duration/step budget and can be forced into excessive CPU work. | F4 | OPEN |
@@ -109,3 +109,29 @@ The following phases are gates rather than single defects and remain mandatory:
 - [x] No gameplay, balance, visual or runtime code changed in F0.
 
 **F0 disposition: PASS. Proceed to F1 only on `fix/v6.2-hardening`.**
+
+
+## F1 implementation record — strict replay input timing
+
+- Current replay v9 input timestamps are now treated as exact deterministic simulation-time input starts within `REPLAY_TIME_EPS = 1e-6`, not as `not-before` queue times.
+- A v9 input that becomes older than the current simulation time is rejected as `stale-input`; it is never deferred until the active cut finishes.
+- v9 event timestamps must be strictly increasing, so identical input-start timestamps are invalid before simulation.
+- v9 events later than `deathTime + REPLAY_TIME_EPS` are invalid.
+- Deterministic verification now requires every replay event to have been consumed when death occurs, preventing ignored post-death inputs from verifying.
+- Replay playback and replay seeking use the same timing classifier as local/server analysis and fail closed on stale timing.
+- Replay v1–v8 retain the legacy `not-before` timing behavior for local backward-compatible viewing.
+- Built-in stress diagnostics now cover strict due/stale/future classification, legacy timing compatibility, and duplicate v9 timestamp rejection.
+- The generated Cloudflare verifier must be rebuilt from this source before F1 is closed.
+
+F1 changes are limited to replay timing integrity and regression coverage; gameplay balance, visuals, game modes and save schema remain unchanged.
+
+### F1 verification evidence
+
+- Inline runtime JavaScript parses successfully after hardening.
+- Source-level timing regression tests pass for v9 due/stale/future classification.
+- Duplicate/effectively-duplicate v9 timestamps are rejected.
+- Legacy v8 duplicate timestamp validation remains backward-compatible.
+- Generated server verifier contains the same strict timing helper, stale-input rejection and all-events-consumed verification requirement.
+- Generated verifier and Worker source pass Node syntax checks.
+
+**F1 disposition: PASS. VC-001 closed.**
