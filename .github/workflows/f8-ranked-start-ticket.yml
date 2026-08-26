@@ -1,0 +1,96 @@
+name: F8 ranked start ticket synchronization
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f8-ranked-start-ticket.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F8 ranked-start patch
+        run: python3 leaderboard/scripts/f8-fix-ticket-start-race.py
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs ../index.html
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Mark F8 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old='| VC-008 | MEDIUM | PLAY can consume no leaderboard ticket if asynchronous prefetch has not completed, silently starting an unranked run. | F8 | FIXED — VERIFYING |'
+          new='| VC-008 | MEDIUM | PLAY can consume no leaderboard ticket if asynchronous prefetch has not completed, silently starting an unranked run. | F8 | FIXED — F8 PASS |'
+          if s.count(old)!=1:
+              raise SystemExit('VC-008 verification status marker missing')
+          s=s.replace(old,new,1)
+          s += '''\n### F8 verification evidence\n\n- A ready valid ticket is consumed immediately without issuing another ticket request.\n- If no ready ticket exists, standard PLAY awaits the existing/new prefetch rather than synchronously choosing a local seed.\n- A ticket that resolves inside the 2,000 ms start budget is consumed and its server seed remains authoritative for the ranked run.\n- A settled request with no ticket produces explicit `LEADERBOARD UNAVAILABLE` local-run status.\n- A ticket arriving after the bounded start budget cannot attach to the already-starting run; that run becomes explicitly local with `LEADERBOARD TIMEOUT`, while the late ticket may be reused only by a later run.\n- Repeated start attempts share one pending start promise, and navigation away prevents the async continuation from launching unexpectedly.\n- Standard mouse, keyboard, retry/restart and post-tutorial starts converge on the synchronized path; challenge starts remain outside global-ticket acquisition.\n- Inline runtime parses successfully, source-client and shipped acquisition helpers match, and F1-F7 permanent regressions remain green.\n\n**F8 disposition: PASS. VC-008 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F8 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f index.html leaderboard/client/global-leaderboard-runtime.js design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-ranked-start-ticket-source.mjs
+          git diff --cached --check
+          git commit -m 'F8: synchronize ranked run ticket start'
+          git push origin HEAD:fix/v6.2-hardening
