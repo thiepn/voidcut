@@ -39,8 +39,8 @@ for (const required of [
   "rankedRunInvalidReason=null;rankedRunInvalidNoticeShown=false;void prefetchLeaderboardTicket()",
   "const leaderboardTicketForRun=activeLeaderboardTicket,rankedInvalidReasonForRun=rankedRunInvalidReason",
   "const rankedText=rankedInvalidReasonForRun?`UNRANKED • ${rankedInvalidReasonForRun}`:''",
-  'id="pauseEligibility"',
 ]) assert.ok(source.includes(required), `missing F2 invariant: ${required}`);
+assert.ok(html.includes('id="pauseEligibility"'), 'pause eligibility disclosure node is missing');
 
 const toggle = source.match(/function togglePause\(force,pauseReason='PAUSED'\)\{[^\n]+\}/)?.[0] || '';
 assert.ok(toggle.includes('invalidateRankedRun(pauseReason)'), 'manual pause path must invalidate ranked ticket');
