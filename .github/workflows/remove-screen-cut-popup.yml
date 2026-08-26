@@ -1,0 +1,128 @@
+name: Remove VOIDCUT screen-cut popup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/remove-screen-cut-popup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  remove-popup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Remove screen-cut transition completely
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+
+          dom='<div id="screenCutFx" class="vc-screen-cut" aria-hidden="true"><span class="cut-pane cut-pane-a"></span><span class="cut-pane cut-pane-b"></span><span class="cut-beam"></span></div>\n'
+          if s.count(dom)!=1:
+              raise SystemExit(f'Expected one screenCutFx DOM node, found {s.count(dom)}')
+          s=s.replace(dom,'',1)
+
+          s=s.replace('let screenCutTimer=0,rankUpTimer=0;','let rankUpTimer=0;',1)
+          s=s.replace('function screenCutTransition(){/* intentionally disabled: navigation should not flash a center-screen overlay */}\n','',1)
+          s=re.sub(r"screenCutTransition\('[^']+'\);",'',s)
+
+          if 'screenCutFx' in s or 'screenCutTransition(' in s or 'screenCutTimer' in s:
+              raise SystemExit('Screen-cut runtime references remain after removal')
+
+          p.write_text(s,encoding='utf-8')
+
+          sw=Path('sw.js')
+          w=sw.read_text(encoding='utf-8')
+          old="const VOIDCUT_CACHE_VERSION = '6.1.0-pwa3';"
+          if old not in w:
+              raise SystemExit('Expected pwa3 service worker cache')
+          w=w.replace(old,"const VOIDCUT_CACHE_VERSION = '6.1.0-pwa4';",1)
+
+          install="self.addEventListener('install', event => {\n  event.waitUntil((async () => {\n    const cache = await caches.open(VOIDCUT_CACHE);\n    await cache.addAll(VOIDCUT_CORE_URLS);\n  })());\n});"
+          install_new="self.addEventListener('install', event => {\n  event.waitUntil((async () => {\n    const cache = await caches.open(VOIDCUT_CACHE);\n    await cache.addAll(VOIDCUT_CORE_URLS);\n    await self.skipWaiting();\n  })());\n});"
+          if install not in w:
+              raise SystemExit('Service-worker install anchor missing')
+          w=w.replace(install,install_new,1)
+
+          nav_old="""  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      const cache = await caches.open(VOIDCUT_CACHE);
+      const cached = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });
+      if (cached) return cached;
+
+      try {
+        const response = await fetch(request);
+        if (response && response.ok) {
+          await cache.put(VOIDCUT_INDEX_URL, response.clone());
+        }
+        return response;
+      } catch (error) {
+        const fallback = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });
+        if (fallback) return fallback;
+        throw error;
+      }
+    })());
+    return;
+  }
+"""
+          nav_new="""  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      const cache = await caches.open(VOIDCUT_CACHE);
+      try {
+        const response = await fetch(request, { cache: 'no-store' });
+        if (response && response.ok) {
+          await cache.put(VOIDCUT_INDEX_URL, response.clone());
+        }
+        return response;
+      } catch (error) {
+        const fallback = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });
+        if (fallback) return fallback;
+        throw error;
+      }
+    })());
+    return;
+  }
+"""
+          if nav_old not in w:
+              raise SystemExit('Service-worker navigation strategy anchor missing')
+          w=w.replace(nav_old,nav_new,1)
+          sw.write_text(w,encoding='utf-8')
+          print('Removed screen-cut transition and forced fresh navigation shell updates.')
+          PY
+
+      - name: Validate popup removal
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          if 'screenCutFx' in s or 'screenCutTransition(' in s or 'screenCutTimer' in s:
+              raise SystemExit('Screen-cut runtime still present')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',s,re.S|re.I)
+          if not scripts: raise SystemExit('No inline JS found')
+          Path('/tmp/voidcut-no-popup.js').write_text(max(scripts,key=len),encoding='utf-8')
+          PY
+          node --check /tmp/voidcut-no-popup.js
+          node --check sw.js
+          grep -q "6.1.0-pwa4" sw.js
+          grep -q "await self.skipWaiting()" sw.js
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/remove-screen-cut-popup.yml
+          git add index.html sw.js
+          git commit -m "Remove intrusive screen-cut popup"
+          git push
