@@ -1,5 +1,6 @@
 name: F2 ranked pause hardening
 
+# One-shot verification runner for F2. Removed after PASS.
 on:
   push:
     branches: [fix/v6.2-hardening]
