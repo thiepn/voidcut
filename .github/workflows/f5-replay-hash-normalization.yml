@@ -1,0 +1,61 @@
+name: F5 replay hash normalization
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f5-replay-hash-normalization.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F5 normalization patch
+        run: python3 leaderboard/scripts/f5-fix-replay-hash-normalization.py
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Run F4 resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Mark F5 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old='| VC-005 | HIGH | Global replay retrieval lowercases hashes but validates with an uppercase-only hexadecimal regex. | F5 | FIXED — VERIFYING |'
+          new='| VC-005 | HIGH | Global replay retrieval lowercases hashes but validates with an uppercase-only hexadecimal regex. | F5 | FIXED — F5 PASS |'
+          if s.count(old)!=1:
+              raise SystemExit('VC-005 verification status marker missing')
+          s=s.replace(old,new,1)
+          s += '''\n### F5 verification evidence\n\n- Lowercase 64-character SHA-256 replay IDs validate unchanged.\n- Uppercase and mixed-case request forms canonicalize to the same lowercase identifier.\n- Invalid-length and non-hex replay IDs remain rejected.\n- D1 owner lookup and R2 replay-object lookup both use the canonical lowercase identifier.\n- The route-level lowercase normalization and lowercase `sha256()` output are consistent with the retrieval helper.\n- The obsolete uppercase-only validator is absent.\n- Worker syntax and F4 replay-resource regression remain green.\n\n**F5 disposition: PASS. VC-005 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F5 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f leaderboard/src/index.js design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-replay-hash-normalization-source.mjs
+          git diff --cached --check
+          git commit -m 'F5: normalize global replay hashes'
+          git push origin HEAD:fix/v6.2-hardening
