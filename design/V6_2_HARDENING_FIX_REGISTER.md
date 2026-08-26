@@ -56,7 +56,7 @@ Until final certification:
 | VC-005 | HIGH | Global replay retrieval lowercases hashes but validates with an uppercase-only hexadecimal regex. | F5 | FIXED — F5 PASS |
 | VC-006 | HIGH | Anonymous rate-limit identity uses IP + attacker-controlled User-Agent and is trivially splittable. | F6 | FIXED — F6 PASS |
 | VC-007 | HIGH | Turnstile backend enforcement is implemented without matching client token acquisition/submission. | F7 | FIXED — F7 PASS |
-| VC-008 | MEDIUM | PLAY can consume no leaderboard ticket if asynchronous prefetch has not completed, silently starting an unranked run. | F8 | OPEN |
+| VC-008 | MEDIUM | PLAY can consume no leaderboard ticket if asynchronous prefetch has not completed, silently starting an unranked run. | F8 | FIXED — F8 PASS |
 | VC-009 | MEDIUM | Only one in-memory pending leaderboard submission is retained; later runs/reloads/network failure can lose a valid submission. | F9 | OPEN |
 | VC-010 | MEDIUM | Profile creation ignores failure to persist/read back local leaderboard identity, potentially orphaning the username/token relationship. | F10 | OPEN |
 | VC-011 | MEDIUM | Local best-replay selection does not use the same score/chamber/time ordering as the global leaderboard. | F11 | OPEN |
@@ -283,3 +283,33 @@ If Turnstile is introduced in a future release, it must be implemented as an exp
 - Worker syntax and permanent F1-F6 regressions remain green.
 
 **F7 disposition: PASS. VC-007 closed.**
+
+## F8 implementation record — synchronized ranked run start
+
+- Standard PLAY no longer calls `takeLeaderboardTicket()` synchronously while a ticket prefetch may still be in flight.
+- Ranked start acquisition first consumes an already-ready ticket; otherwise it awaits the existing/new ticket request within a bounded 2,000 ms start budget.
+- A successful acquisition uses the server-issued ticket seed for the run exactly as before.
+- If the ticket request settles without a usable ticket, the run starts locally with explicit `LEADERBOARD UNAVAILABLE` status.
+- If the ranked-start budget expires first, the run starts locally with explicit `LEADERBOARD TIMEOUT` status; the still-running prefetch may only prepare a ticket for a later run.
+- While acquisition is pending the lifecycle state is `starting`, preventing cuts/pause/key-repeat starts from treating the not-yet-started run as active gameplay.
+- Repeated standard start attempts share one `rankedStartPromise`, so double-click/Space cannot create parallel ticket acquisitions or multiple runs.
+- Before launch, the async continuation verifies the state is still `starting`; navigation away during the bounded wait cancels that pending launch instead of unexpectedly starting a run later.
+- Mouse PLAY, keyboard Space, standard retry/restart and post-tutorial standard start all converge on the same synchronized `start()` path.
+- Challenge starts bypass ranked-ticket acquisition and remain unchanged.
+- The source client fragment and shipped inline leaderboard runtime now share the same acquisition helper and 2,000 ms contract.
+
+F8 changes only standard-run ticket acquisition/start synchronization and explicit ranked/local status. Physics, scoring, replay format, save schema, ticket TTL, server seed generation and leaderboard verification are unchanged.
+
+### F8 verification evidence
+
+- A ready valid ticket is consumed immediately without issuing another ticket request.
+- If no ready ticket exists, standard PLAY awaits the existing/new prefetch rather than synchronously choosing a local seed.
+- A ticket that resolves inside the 2,000 ms start budget is consumed and its server seed remains authoritative for the ranked run.
+- A settled request with no ticket produces explicit `LEADERBOARD UNAVAILABLE` local-run status.
+- A ticket arriving after the bounded start budget cannot attach to the already-starting run; that run becomes explicitly local with `LEADERBOARD TIMEOUT`, while the late ticket may be reused only by a later run.
+- Repeated start attempts share one pending start promise, and navigation away prevents the async continuation from launching unexpectedly.
+- The F2 explicit new-run invalidation reset remains intact before any F8 local-start reason is applied.
+- Standard mouse, keyboard, retry/restart and post-tutorial starts converge on the synchronized path; challenge starts remain outside global-ticket acquisition.
+- Inline runtime parses successfully, source-client and shipped acquisition helpers match, and F1-F7 permanent regressions remain green.
+
+**F8 disposition: PASS. VC-008 closed.**
