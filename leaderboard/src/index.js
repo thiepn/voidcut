@@ -3,7 +3,9 @@ import { verifyReplay } from './generated-verifier.js';
 
 const RULESET = Object.freeze({ build: '6.1.0', replay: 9, arena: 2, director: 6 });
 const TICKET_TTL_MS = 6 * 60 * 60 * 1000;
-const MAX_REPLAY_BYTES = 12_500_000;
+const MAX_REPLAY_BYTES = 2_500_000;
+const MAX_COMPETITIVE_EVENTS = 12_000;
+const MAX_COMPETITIVE_DURATION = 1_800;
 const NAME_RE = /^[A-Za-z0-9 _-]{3,16}$/;
 const RESERVED_NAMES = new Set(['ADMIN', 'MOD', 'MODERATOR', 'SYSTEM', 'VOIDCUT', 'DEVELOPER', 'STAFF']);
 const ALLOWED_ORIGINS = new Set([
@@ -116,6 +118,29 @@ async function readJson(request, maxBytes = 32_000) {
   const text = await request.text();
   if (text.length > maxBytes) throw new Error('body-too-large');
   return text ? JSON.parse(text) : {};
+}
+async function readBoundedText(request, maxBytes) {
+  const len = Number(request.headers.get('Content-Length') || 0);
+  if (len && len > maxBytes) throw new Error('body-too-large');
+  if (!request.body) return '';
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let text = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value?.byteLength || 0;
+      if (total > maxBytes) throw new Error('body-too-large');
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  } catch (err) {
+    try { await reader.cancel(); } catch {}
+    throw err;
+  }
 }
 async function checkTurnstile(request, env, token) {
   if (env.TURNSTILE_REQUIRED !== '1') return true;
@@ -262,10 +287,7 @@ export class ReplayVerifier extends DurableObject {
 
     let text;
     try {
-      const len = Number(request.headers.get('Content-Length') || 0);
-      if (len && len > MAX_REPLAY_BYTES) throw new Error('too-large');
-      text = await request.text();
-      if (text.length > MAX_REPLAY_BYTES) throw new Error('too-large');
+      text = await readBoundedText(request, MAX_REPLAY_BYTES);
     } catch {
       return error(request, 413, 'replay-too-large', 'Replay is too large.');
     }
@@ -275,6 +297,9 @@ export class ReplayVerifier extends DurableObject {
       return this.#reject(request, ticketId, 'wrong-ruleset', 'Only current VOIDCUT competitive runs can enter the global leaderboard.');
     }
     if ((replay.seed >>> 0) !== (Number(ticket.seed) >>> 0)) return this.#reject(request, ticketId, 'seed-mismatch', 'Replay seed does not match its server-issued run ticket.');
+    if (!Array.isArray(replay.events) || replay.events.length > MAX_COMPETITIVE_EVENTS || !Number.isFinite(replay.deathTime) || replay.deathTime < 0 || replay.deathTime > MAX_COMPETITIVE_DURATION) {
+      return this.#reject(request, ticketId, 'replay-resource-limit', 'Replay exceeds competitive verification limits.');
+    }
 
     const official = verifyReplay(replay);
     if (!official) return this.#reject(request, ticketId, 'verification-failed', 'Deterministic replay verification failed.');

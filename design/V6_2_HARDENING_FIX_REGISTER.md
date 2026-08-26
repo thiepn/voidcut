@@ -52,7 +52,7 @@ Until final certification:
 | VC-001 | CRITICAL | Replay verifier treats timestamps as not-before times, allowing stale/queued cuts to execute later with zero input delay. | F1 | FIXED — F1 PASS |
 | VC-002 | CRITICAL | Ranked runs can be manually paused or lifecycle-paused without losing leaderboard eligibility. | F2 | FIXED — F2 PASS |
 | VC-003 | CRITICAL | Main-loop frame-gap clamping can create a slow-motion competitive advantage under throttling/stalls. | F3 | FIXED — F3 PASS |
-| VC-004 | HIGH | Replay verifier lacks a hard maximum simulation duration/step budget and can be forced into excessive CPU work. | F4 | OPEN |
+| VC-004 | HIGH | Replay verifier lacks a hard maximum simulation duration/step budget and can be forced into excessive CPU work. | F4 | FIXED — F4 PASS |
 | VC-005 | HIGH | Global replay retrieval lowercases hashes but validates with an uppercase-only hexadecimal regex. | F5 | OPEN |
 | VC-006 | HIGH | Anonymous rate-limit identity uses IP + attacker-controlled User-Agent and is trivially splittable. | F6 | OPEN |
 | VC-007 | HIGH | Turnstile backend enforcement is implemented without matching client token acquisition/submission. | F7 | OPEN |
@@ -188,3 +188,30 @@ F3 does not alter simulation speed, physics, scoring, replay format or save sche
 - F1 replay timestamp and F2 ranked-pause regressions remain green.
 
 **F3 disposition: PASS. VC-003 closed.**
+
+## F4 implementation record — replay verifier resource ceilings
+
+- Current competitive replay verification now has explicit pre-simulation ceilings: 30 minutes (`1800 s`), 12,000 input events, and 216,100 deterministic simulation steps.
+- The step counter is independent of replay `deathTime`, so verifier termination no longer depends solely on attacker-controlled duration fields or simulation-clock progress.
+- Browser/local replay compatibility keeps the existing broader 50,000-event / 12 MB import envelope; the tighter ceilings apply only when `analyzeReplayData(..., true)` is used by the generated global verifier.
+- The generated verifier now explicitly invokes competitive analyzer mode.
+- The leaderboard Worker rejects over-limit event counts/durations before deterministic verification and before replay hashing/storage.
+- Maximum leaderboard replay request size is reduced from 12.5 MB to 2.5 MB.
+- Durable Object replay ingestion now reads the request stream incrementally with a byte counter and cancels once the limit is crossed, including when `Content-Length` is missing or false.
+- Existing edge `Content-Length` rejection remains as an earlier fast path.
+
+F4 does not change physics, scoring, save schema, replay version, local replay playback rules, or gameplay balance.
+
+### F4 verification evidence
+
+- Inline runtime JavaScript parses after resource-budget hardening.
+- Competitive preflight accepts the exact 30-minute / 12,000-event boundary and rejects values above either ceiling.
+- Local/legacy replay validation retains its broader compatibility envelope.
+- Competitive analyzer contains an independent 216,100-step fail-safe checked before each deterministic simulation update.
+- Leaderboard request ingestion is capped at 2.5 MB and chunked bodies are byte-counted/cancelled while streaming.
+- Worker structural resource preflight runs before deterministic verification.
+- Generated server verifier explicitly invokes competitive analyzer mode and contains the same event, duration and step ceilings.
+- Generated verifier and Worker source pass Node syntax checks.
+- F1, F2 and F3 permanent regressions remain green.
+
+**F4 disposition: PASS. VC-004 closed.**
