@@ -1,0 +1,37 @@
+name: F10 inspect identity save integration
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f10-inspect-identity-save.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+      - name: Print relevant source snippets
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          terms=['function exportSave','function importSave','function saveExport','function saveImport',"$('exportSave')","$('importSave')",'EXPORT SAVE','IMPORT SAVE','replayExportCode','encodeSave','decodeSave']
+          seen=set()
+          for term in terms:
+              pos=0
+              while True:
+                  i=s.find(term,pos)
+                  if i<0: break
+                  key=(term,i)
+                  if key not in seen:
+                      seen.add(key)
+                      a=max(0,i-900); b=min(len(s),i+2400)
+                      print('\n===',term,'@',i,'===\n',s[a:b])
+                  pos=i+1
+          PY
