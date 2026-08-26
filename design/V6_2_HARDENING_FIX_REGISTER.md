@@ -51,7 +51,7 @@ Until final certification:
 |---|---|---|---|---|
 | VC-001 | CRITICAL | Replay verifier treats timestamps as not-before times, allowing stale/queued cuts to execute later with zero input delay. | F1 | FIXED — F1 PASS |
 | VC-002 | CRITICAL | Ranked runs can be manually paused or lifecycle-paused without losing leaderboard eligibility. | F2 | FIXED — F2 PASS |
-| VC-003 | CRITICAL | Main-loop frame-gap clamping can create a slow-motion competitive advantage under throttling/stalls. | F3 | OPEN |
+| VC-003 | CRITICAL | Main-loop frame-gap clamping can create a slow-motion competitive advantage under throttling/stalls. | F3 | FIXED — F3 PASS |
 | VC-004 | HIGH | Replay verifier lacks a hard maximum simulation duration/step budget and can be forced into excessive CPU work. | F4 | OPEN |
 | VC-005 | HIGH | Global replay retrieval lowercases hashes but validates with an uppercase-only hexadecimal regex. | F5 | OPEN |
 | VC-006 | HIGH | Anonymous rate-limit identity uses IP + attacker-controlled User-Agent and is trivially splittable. | F6 | OPEN |
@@ -160,3 +160,31 @@ F2 changes are limited to leaderboard eligibility around pause/lifecycle interru
 - F1 replay timestamp regression remains green.
 
 **F2 disposition: PASS. VC-002 closed.**
+
+## F3 implementation record — ranked wall-clock integrity
+
+- Ranked standard PLAY now maintains an explicit runtime timing-integrity ledger separate from deterministic simulation state.
+- Active-play frame wall time is compared against the bounded simulation delta; discarded wall time is accumulated rather than silently ignored.
+- Any active-play frame gap greater than 200 ms immediately invalidates global leaderboard eligibility as `FRAME STALL`.
+- Cumulative discarded active-play wall time of 250 ms or more invalidates eligibility as `TIMING DRIFT`, preventing repeated smaller throttling gaps from accumulating a meaningful reaction-time advantage.
+- Any ranked main-loop catch-up step-cap hit invalidates eligibility as `CATCH-UP LIMIT`.
+- Lifecycle and viewport timing resets debit unsimulated wall time plus pending accumulator time into the same discarded-time budget before clocks are reset.
+- Significant display changes retain the F2 pause invalidation path; insignificant repeated viewport resets can no longer erase simulation time indefinitely without eventually becoming unranked.
+- Intentional chamber transitions, paused runs, tutorial/challenge/replay states and already-unranked runs are excluded from ranked timing accounting.
+- Timing invalidation discards the active leaderboard ticket but leaves the run fully playable and recordable locally.
+
+F3 does not alter simulation speed, physics, scoring, replay format or save schema. It only determines whether a locally playable standard run remains eligible for global submission.
+
+### F3 verification evidence
+
+- Inline runtime JavaScript parses successfully after wall-clock integrity hardening.
+- Smooth 60 FPS-equivalent ranked timing remains eligible with zero discarded-time debit.
+- A moderate isolated frame stutter remains inside tolerance.
+- Any active-play frame gap over 200 ms invalidates ranking as FRAME STALL.
+- Repeated smaller clamped gaps invalidate once cumulative discarded wall time reaches 250 ms.
+- Any main-loop catch-up step-cap hit invalidates ranking as CATCH-UP LIMIT.
+- Lifecycle and viewport timing resets debit unsimulated wall time and accumulator residue before reset.
+- Transition and paused states are excluded from active-play timing enforcement.
+- F1 replay timestamp and F2 ranked-pause regressions remain green.
+
+**F3 disposition: PASS. VC-003 closed.**
