@@ -155,7 +155,8 @@ async function checkTurnstile(request, env, token) {
   return data?.success === true;
 }
 function preauthKey(request) {
-  return `${request.headers.get('CF-Connecting-IP') || 'unknown'}|${(request.headers.get('User-Agent') || '').slice(0, 96)}`;
+  const ip = String(request.headers.get('CF-Connecting-IP') || '').trim();
+  return `ip:${ip || 'unknown'}`;
 }
 async function rankForPlayer(env, player) {
   if (!player || !Number.isFinite(player.best_score) || player.best_score <= 0) return null;

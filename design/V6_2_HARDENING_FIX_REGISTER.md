@@ -54,7 +54,7 @@ Until final certification:
 | VC-003 | CRITICAL | Main-loop frame-gap clamping can create a slow-motion competitive advantage under throttling/stalls. | F3 | FIXED — F3 PASS |
 | VC-004 | HIGH | Replay verifier lacks a hard maximum simulation duration/step budget and can be forced into excessive CPU work. | F4 | FIXED — F4 PASS |
 | VC-005 | HIGH | Global replay retrieval lowercases hashes but validates with an uppercase-only hexadecimal regex. | F5 | FIXED — F5 PASS |
-| VC-006 | HIGH | Anonymous rate-limit identity uses IP + attacker-controlled User-Agent and is trivially splittable. | F6 | OPEN |
+| VC-006 | HIGH | Anonymous rate-limit identity uses IP + attacker-controlled User-Agent and is trivially splittable. | F6 | FIXED — F6 PASS |
 | VC-007 | HIGH | Turnstile backend enforcement is implemented without matching client token acquisition/submission. | F7 | OPEN |
 | VC-008 | MEDIUM | PLAY can consume no leaderboard ticket if asynchronous prefetch has not completed, silently starting an unranked run. | F8 | OPEN |
 | VC-009 | MEDIUM | Only one in-memory pending leaderboard submission is retained; later runs/reloads/network failure can lose a valid submission. | F9 | OPEN |
@@ -238,3 +238,27 @@ F5 changes only global replay retrieval normalization; replay generation, verifi
 - Worker syntax and F4 replay-resource regression remain green.
 
 **F5 disposition: PASS. VC-005 closed.**
+
+## F6 implementation record — stable anonymous rate-limit identity
+
+- Anonymous profile-creation and run-ticket rate limits now key only on Cloudflare's server-provided `CF-Connecting-IP`; attacker-controlled `User-Agent` is no longer part of rate-limit identity.
+- The key is namespaced as `ip:<address>` so its meaning is explicit and cannot be confused with authenticated player/token identities.
+- Requests without a `CF-Connecting-IP` use the stable fail-closed bucket `ip:unknown` rather than a caller-controlled fallback header.
+- Rotating, randomizing or omitting `User-Agent` therefore cannot create additional anonymous profile/run rate-limit buckets.
+- Authenticated run tickets continue to use the authenticated player ID, and score submission throttling continues to use the SHA-256 of the bearer token; F6 does not weaken authenticated throttling.
+- Existing Cloudflare rate-limit quotas and namespaces remain unchanged.
+
+F6 changes only anonymous rate-limit identity construction; authentication tokens, leaderboard rules, replay verification, scoring, storage, save schema and gameplay are unchanged.
+
+### F6 verification evidence
+
+- Two requests from the same `CF-Connecting-IP` produce the same anonymous limiter key even when `User-Agent` is changed, randomized or omitted.
+- Different trusted client IPs produce distinct anonymous limiter keys.
+- Missing trusted IP falls into the stable `ip:unknown` fail-closed bucket.
+- The anonymous key does not consult `User-Agent`, `X-Forwarded-For`, `X-Real-IP`, or other caller-controlled identity headers.
+- Profile creation and unauthenticated run-ticket issuance both use the hardened anonymous key.
+- Authenticated run-ticket and bearer-token submission throttling remain unchanged.
+- Cloudflare limiter namespaces, quotas and periods remain unchanged.
+- Worker syntax, F4 replay-resource regression and F5 replay-hash regression remain green.
+
+**F6 disposition: PASS. VC-006 closed.**
