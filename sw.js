@@ -1,5 +1,5 @@
 const VOIDCUT_CACHE_PREFIX = 'voidcut-shell-';
-const VOIDCUT_CACHE_VERSION = '6.1.0-pwa3';
+const VOIDCUT_CACHE_VERSION = '6.1.0-pwa4';
 const VOIDCUT_CACHE = `${VOIDCUT_CACHE_PREFIX}${VOIDCUT_CACHE_VERSION}`;
 const VOIDCUT_SCOPE = self.registration.scope;
 
@@ -23,6 +23,7 @@ self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(VOIDCUT_CACHE);
     await cache.addAll(VOIDCUT_CORE_URLS);
+    await self.skipWaiting();
   })());
 });
 
@@ -56,11 +57,8 @@ self.addEventListener('fetch', event => {
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
       const cache = await caches.open(VOIDCUT_CACHE);
-      const cached = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });
-      if (cached) return cached;
-
       try {
-        const response = await fetch(request);
+        const response = await fetch(request, { cache: 'no-store' });
         if (response && response.ok) {
           await cache.put(VOIDCUT_INDEX_URL, response.clone());
         }
