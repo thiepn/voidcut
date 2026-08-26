@@ -58,7 +58,7 @@ Until final certification:
 | VC-007 | HIGH | Turnstile backend enforcement is implemented without matching client token acquisition/submission. | F7 | FIXED — F7 PASS |
 | VC-008 | MEDIUM | PLAY can consume no leaderboard ticket if asynchronous prefetch has not completed, silently starting an unranked run. | F8 | FIXED — F8 PASS |
 | VC-009 | MEDIUM | Only one in-memory pending leaderboard submission is retained; later runs/reloads/network failure can lose a valid submission. | F9 | FIXED — F9 PASS |
-| VC-010 | MEDIUM | Profile creation ignores failure to persist/read back local leaderboard identity, potentially orphaning the username/token relationship. | F10 | OPEN |
+| VC-010 | MEDIUM | Profile creation ignores failure to persist/read back local leaderboard identity, potentially orphaning the username/token relationship. | F10 | FIXED — F10 PASS |
 | VC-011 | MEDIUM | Local best-replay selection does not use the same score/chamber/time ordering as the global leaderboard. | F11 | OPEN |
 | VC-012 | LOW | Exact-tie self-rank calculation omits the final player-ID tie-break used by leaderboard ordering. | F11 | OPEN |
 | VC-013 | MEDIUM | Expired/rejected/used run tickets have no retention cleanup and accumulate indefinitely. | F12 | OPEN |
@@ -75,7 +75,7 @@ Until final certification:
 | VC-024 | MEDIUM | Built-in diagnostics do not exercise live leaderboard API/replay retrieval, ranked timing integrity, or full SW update behavior. | F20 | OPEN |
 | VC-025 | HIGH | Current v6.1/save17/replay9 code has not been run through the old full cross-browser/PWA certification suite. | F21 | OPEN |
 | VC-026 | MEDIUM | Existing release-certification documents describe v6.0/save16/replay8 and stale Daily/PWA behavior. | F27 | OPEN |
-| VC-027 | LOW | Leaderboard identity is outside the normal full-save export/import path; profile ownership is not portable/recoverable through the current backup flow. | F10/F24 | OPEN |
+| VC-027 | LOW | Leaderboard identity is outside the normal full-save export/import path; profile ownership is not portable/recoverable through the current backup flow. | F10/F24 | FIXED — F10 PASS; F24 AUDIT PENDING |
 
 ## Validation / release phases
 
@@ -345,3 +345,36 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Inline runtime parses successfully, Worker syntax remains green, and permanent F1-F8 regressions remain green.
 
 **F9 disposition: PASS. VC-009 closed.**
+
+## F10 implementation record — leaderboard identity durability and ownership portability
+
+- Leaderboard ownership credentials now use validated, checksummed primary and backup local-storage snapshots instead of one unchecked raw local-storage value.
+- The existing primary key remains unchanged for compatibility; legacy raw identity objects are accepted, normalized and repaired into the new redundant envelope format on read.
+- Identity reads choose the newest valid primary/backup snapshot and repair a missing, stale or corrupt counterpart.
+- Identity writes run a storage preflight, write both copies, immediately read back both copies and return success only when both round-trip to the exact normalized identity.
+- Server-side profile creation is not attempted when the browser fails the local identity-storage preflight.
+- After the server returns a new token, queued ranked submissions are not drained unless the identity was durably written and read back successfully.
+- If storage fails in the narrow interval after server profile creation, the credential is retained only in an emergency in-memory holder and the UI instructs the player to export their full save before closing; authenticated requests do not silently treat that volatile credential as durable ownership.
+- A server `401` clears the primary identity, backup identity, storage-test residue and emergency in-memory copy together, so an invalid token cannot resurrect from backup.
+- Full-save export now emits backward-compatible `VC35SAVE` envelope format `f:3`, whose checksum covers both normalized game-save data and an optional leaderboard identity credential block.
+- Full-save import still accepts legacy `f:1` / `f:2` codes unchanged. Valid `f:3` imports restore leaderboard ownership only after the complete credential-bearing package checksum validates.
+- Imported ownership uses the same redundant write/readback path; if destination storage is unavailable, the imported credential remains in emergency memory so it can be immediately re-exported rather than silently lost.
+- Save schema remains 17 because leaderboard credentials are envelope-level ownership metadata, not gameplay/save-state fields. F24 remains the destructive migration/corruption audit gate for the completed portability path.
+- No Worker, replay verifier, replay format, ticket TTL, physics, scoring or leaderboard ordering changed in F10.
+
+### F10 verification evidence
+
+- Identity normalization rejects malformed ownership records while preserving the existing public-name character contract.
+- A successful identity store writes checksummed primary and backup snapshots and immediately verifies both by readback.
+- Legacy raw identity storage is accepted and automatically repaired into the redundant envelope format.
+- Corrupt primary storage recovers from backup and repairs primary; corrupt backup storage recovers from primary and repairs backup; two invalid copies fail closed.
+- Clearing identity removes both persistent copies, storage-test residue and the emergency in-memory credential.
+- Storage self-test failure is detected before `/profile/create`, so the server is not asked to create an ownership record the browser cannot persist.
+- The post-create path checks `storeLeaderboardIdentity()` before any F9 queue drain and exposes an emergency export instruction if the write/readback fails.
+- Authenticated leaderboard requests continue to use only the durable loader, not the emergency in-memory credential.
+- Full-save `f:3` checksum covers both save data and optional identity; tampering either changes the package checksum.
+- Full-save import remains compatible with legacy `f:1` / `f:2` envelopes and restores validated `f:3` ownership through the redundant persistence path.
+- Save schema stays 17 and replay/gameplay contracts remain unchanged.
+- Inline runtime parses successfully, Worker syntax remains green, and permanent F1-F9 regressions remain green.
+
+**F10 disposition: PASS. VC-010 closed. VC-027 functionally closed, with destructive portability/recovery audit retained for F24.**

@@ -72,7 +72,7 @@ function makeAcquire(take, prefetch) {
 }
 
 for (const required of [
-  "let leaderboardTicket=null,leaderboardTicketPromise=null,activeLeaderboardTicket=null,rankedRunInvalidReason=null,rankedRunInvalidNoticeShown=false,rankedTimingIntegrity=null,rankedStartPromise=null,leaderboardSubmissionQueue=[],leaderboardQueueDrainPromise=null,leaderboardQueueRetryTimer=null;",
+  "let leaderboardTicket=null,leaderboardTicketPromise=null,activeLeaderboardTicket=null,rankedRunInvalidReason=null,rankedRunInvalidNoticeShown=false,rankedTimingIntegrity=null,rankedStartPromise=null,leaderboardSubmissionQueue=[],leaderboardQueueDrainPromise=null,leaderboardQueueRetryTimer=null,leaderboardIdentityMemory=null;",
   "async function start(challenge=null,skipTutorial=false)",
   "if(challenge){launchRun(challenge,skipTutorial,null,null);return}",
   "if(rankedStartPromise)return rankedStartPromise",
