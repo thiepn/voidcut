@@ -146,14 +146,17 @@ function preauthKey(request) {
   const ip = String(request.headers.get('CF-Connecting-IP') || '').trim();
   return `ip:${ip || 'unknown'}`;
 }
+function compareLeaderboardRank(a,b){const scoreA=Number.isFinite(Number(a?.score))?Number(a.score):0,scoreB=Number.isFinite(Number(b?.score))?Number(b.score):0;if(scoreA!==scoreB)return scoreA>scoreB?-1:1;const chamberA=a?.chamber==null?1:Number.isFinite(Number(a.chamber))?Number(a.chamber):1,chamberB=b?.chamber==null?1:Number.isFinite(Number(b.chamber))?Number(b.chamber):1;if(chamberA!==chamberB)return chamberA>chamberB?-1:1;const timeA=a?.time==null?Infinity:Number.isFinite(Number(a.time))?Number(a.time):Infinity,timeB=b?.time==null?Infinity:Number.isFinite(Number(b.time))?Number(b.time):Infinity;if(timeA!==timeB)return timeA<timeB?-1:1;const updatedA=a?.updatedAt==null?Infinity:Number.isFinite(Number(a.updatedAt))?Number(a.updatedAt):Infinity,updatedB=b?.updatedAt==null?Infinity:Number.isFinite(Number(b.updatedAt))?Number(b.updatedAt):Infinity;if(updatedA!==updatedB)return updatedA<updatedB?-1:1;const idA=String(a?.id??''),idB=String(b?.id??'');if(idA!==idB)return idA<idB?-1:1;return 0}
 async function rankForPlayer(env, player) {
   if (!player || !Number.isFinite(player.best_score) || player.best_score <= 0) return null;
+  const score=Number(player.best_score),chamber=Number(player.best_chamber||1),time=player.best_time,updatedAt=Number(player.updated_at||0),id=String(player.id||'');
   const rank = await env.DB.prepare(`SELECT COUNT(*) + 1 AS rank FROM players
     WHERE best_score > ?
        OR (best_score = ? AND best_chamber > ?)
        OR (best_score = ? AND best_chamber = ? AND COALESCE(best_time, 1e99) < COALESCE(?, 1e99))
-       OR (best_score = ? AND best_chamber = ? AND COALESCE(best_time, 1e99) = COALESCE(?, 1e99) AND updated_at < ?)`)
-    .bind(player.best_score, player.best_score, player.best_chamber, player.best_score, player.best_chamber, player.best_time, player.best_score, player.best_chamber, player.best_time, player.updated_at || 0)
+       OR (best_score = ? AND best_chamber = ? AND COALESCE(best_time, 1e99) = COALESCE(?, 1e99) AND updated_at < ?)
+       OR (best_score = ? AND best_chamber = ? AND COALESCE(best_time, 1e99) = COALESCE(?, 1e99) AND updated_at = ? AND id < ?)`)
+    .bind(score, score, chamber, score, chamber, time, score, chamber, time, updatedAt, score, chamber, time, updatedAt, id)
     .first('rank');
   return Number(rank || 1);
 }
@@ -201,10 +204,11 @@ async function startRun(request, env) {
 async function leaderboard(request, env) {
   const url = new URL(request.url);
   const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit')) || 100));
-  const result = await env.DB.prepare(`SELECT id,name,best_score AS score,best_chamber AS chamber,best_time AS time,best_grade AS grade,best_replay_hash AS replayHash
+  const result = await env.DB.prepare(`SELECT id,name,best_score AS score,best_chamber AS chamber,best_time AS time,best_grade AS grade,best_replay_hash AS replayHash,updated_at AS updatedAt
     FROM players WHERE best_score>0
     ORDER BY best_score DESC,best_chamber DESC,COALESCE(best_time,1e99) ASC,updated_at ASC,id ASC LIMIT ?`).bind(limit).all();
-  const rows = (result.results || []).map((r, i) => ({ rank: i + 1, ...r }));
+  const ordered = (result.results || []).sort(compareLeaderboardRank);
+  const rows = ordered.map(({ updatedAt, ...r }, i) => ({ rank: i + 1, ...r }));
   let self = null;
   const playerId = url.searchParams.get('player_id');
   if (playerId) {
@@ -300,9 +304,10 @@ export class ReplayVerifier extends DurableObject {
     const serverReplayHash = await sha256(text);
     const now = Date.now();
     const old = await playerSnapshot(this.env, player.id);
-    const better = !old || official.score > Number(old.best_score || 0)
-      || (official.score === Number(old.best_score || 0) && official.chamber > Number(old.best_chamber || 1))
-      || (official.score === Number(old.best_score || 0) && official.chamber === Number(old.best_chamber || 1) && (old.best_time == null || official.deathTime < Number(old.best_time)));
+    const better = !old || compareLeaderboardRank(
+      {score:official.score,chamber:official.chamber,time:official.deathTime},
+      {score:old.best_score,chamber:old.best_chamber,time:old.best_time}
+    ) < 0;
 
     let personalBest = false;
     if (better) {

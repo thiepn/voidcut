@@ -59,8 +59,8 @@ Until final certification:
 | VC-008 | MEDIUM | PLAY can consume no leaderboard ticket if asynchronous prefetch has not completed, silently starting an unranked run. | F8 | FIXED — F8 PASS |
 | VC-009 | MEDIUM | Only one in-memory pending leaderboard submission is retained; later runs/reloads/network failure can lose a valid submission. | F9 | FIXED — F9 PASS |
 | VC-010 | MEDIUM | Profile creation ignores failure to persist/read back local leaderboard identity, potentially orphaning the username/token relationship. | F10 | FIXED — F10 PASS |
-| VC-011 | MEDIUM | Local best-replay selection does not use the same score/chamber/time ordering as the global leaderboard. | F11 | OPEN |
-| VC-012 | LOW | Exact-tie self-rank calculation omits the final player-ID tie-break used by leaderboard ordering. | F11 | OPEN |
+| VC-011 | MEDIUM | Local best-replay selection does not use the same score/chamber/time ordering as the global leaderboard. | F11 | FIXED — F11 PASS |
+| VC-012 | LOW | Exact-tie self-rank calculation omits the final player-ID tie-break used by leaderboard ordering. | F11 | FIXED — F11 PASS |
 | VC-013 | MEDIUM | Expired/rejected/used run tickets have no retention cleanup and accumulate indefinitely. | F12 | OPEN |
 | VC-014 | LOW | Concurrent personal-best updates can leave obsolete/orphaned R2 replay objects. | F12 | OPEN |
 | VC-015 | MEDIUM | Top-level Worker route try/catch does not await async route handlers consistently, weakening controlled error handling. | F13 | OPEN |
@@ -378,3 +378,29 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Inline runtime parses successfully, Worker syntax remains green, and permanent F1-F9 regressions remain green.
 
 **F10 disposition: PASS. VC-010 closed. VC-027 functionally closed, with destructive portability/recovery audit retained for F24.**
+
+## F11 implementation record — canonical ranking and exact-tie self rank
+
+- A single canonical `compareLeaderboardRank` contract now defines ordering as score DESC, chamber DESC, time ASC, update/record timestamp ASC, stable ID ASC.
+- The exact comparator function text is mirrored in the shipped browser runtime and Worker and is regression-checked for identity, preventing silent semantic drift between local and server ranking logic.
+- Local competitive-run ranking maps `recordedAt` to the canonical timestamp field and replay hash to the canonical stable-ID field, preserving deterministic local ties while sharing the global score/chamber/time semantics.
+- `save.bestReplay` no longer compares score alone: equal-score deeper runs now replace shallower runs, and equal-score/equal-chamber faster runs replace slower runs. Exact score/chamber/time ties leave the existing best replay unchanged.
+- Worker personal-best prechecks now use the same canonical comparator for score/chamber/time before the existing conditional D1 update.
+- Global top-list rows include `updated_at` only internally, are re-sorted through the canonical comparator after the indexed SQL top-list query, then strip the internal timestamp before returning API rows.
+- The D1 top-list query remains ordered by score DESC, chamber DESC, null-safe time ASC, updated_at ASC, id ASC so LIMIT selection and the canonical comparator agree.
+- `rankForPlayer` now counts players with an equal score/chamber/time/update timestamp and lexicographically smaller player ID, matching the list's final `id ASC` tie-break.
+- No scoring, physics, replay, ticket, save-schema, identity, submission-queue or UI-design behavior changed in F11.
+
+### F11 verification evidence
+
+- Browser and Worker contain byte-identical `compareLeaderboardRank` function text.
+- Comparator tests prove score DESC, chamber DESC, time ASC, timestamp ASC and stable-ID ASC ordering, including null-time fallback.
+- Local competitive-run ranking uses the canonical comparator rather than its previous ad-hoc comparison chain.
+- Best-replay replacement uses the canonical score/chamber/time order, so equal-score deeper and equal-score/equal-chamber faster runs are retained correctly.
+- Worker personal-best prechecks use the same canonical comparator before the transactional D1 conditional update.
+- Global leaderboard rows are selected with the same five-field SQL order, passed through the canonical comparator, and do not expose the internal update timestamp.
+- Self-rank SQL now includes `updated_at = ? AND id < ?` as the final exact-tie predicate, matching `id ASC` in the published leaderboard.
+- An adversarial exact-tie fixture confirms a player with the lexicographically smaller ID ranks ahead when score, chamber, time and update timestamp all match.
+- Inline runtime and Worker syntax pass, and permanent F1-F10 regressions remain green.
+
+**F11 disposition: PASS. VC-011 and VC-012 closed.**
