@@ -235,11 +235,16 @@ async function leaderboard(request, env) {
   return json(request, { ok: true, ruleset: RULESET, rows, self });
 }
 
+function normalizeReplayHash(value) {
+  const hash = String(value ?? '').toLowerCase();
+  return /^[a-f0-9]{64}$/.test(hash) ? hash : null;
+}
 async function replayResponse(request, env, hash) {
-  if (!/^[A-F0-9]{64}$/.test(hash)) return error(request, 400, 'invalid-replay', 'Invalid replay id.');
-  const owner = await env.DB.prepare('SELECT id FROM players WHERE best_replay_hash=? LIMIT 1').bind(hash).first();
+  const replayHash = normalizeReplayHash(hash);
+  if (!replayHash) return error(request, 400, 'invalid-replay', 'Invalid replay id.');
+  const owner = await env.DB.prepare('SELECT id FROM players WHERE best_replay_hash=? LIMIT 1').bind(replayHash).first();
   if (!owner) return error(request, 404, 'not-found', 'Replay is not on the leaderboard.');
-  const obj = await env.REPLAYS.get(`verified/${hash}.json`);
+  const obj = await env.REPLAYS.get(`verified/${replayHash}.json`);
   if (!obj) return error(request, 404, 'not-found', 'Replay data is unavailable.');
   const headers = corsHeaders(request);
   headers['Content-Type'] = 'application/json; charset=utf-8';

@@ -53,7 +53,7 @@ Until final certification:
 | VC-002 | CRITICAL | Ranked runs can be manually paused or lifecycle-paused without losing leaderboard eligibility. | F2 | FIXED — F2 PASS |
 | VC-003 | CRITICAL | Main-loop frame-gap clamping can create a slow-motion competitive advantage under throttling/stalls. | F3 | FIXED — F3 PASS |
 | VC-004 | HIGH | Replay verifier lacks a hard maximum simulation duration/step budget and can be forced into excessive CPU work. | F4 | FIXED — F4 PASS |
-| VC-005 | HIGH | Global replay retrieval lowercases hashes but validates with an uppercase-only hexadecimal regex. | F5 | OPEN |
+| VC-005 | HIGH | Global replay retrieval lowercases hashes but validates with an uppercase-only hexadecimal regex. | F5 | FIXED — F5 PASS |
 | VC-006 | HIGH | Anonymous rate-limit identity uses IP + attacker-controlled User-Agent and is trivially splittable. | F6 | OPEN |
 | VC-007 | HIGH | Turnstile backend enforcement is implemented without matching client token acquisition/submission. | F7 | OPEN |
 | VC-008 | MEDIUM | PLAY can consume no leaderboard ticket if asynchronous prefetch has not completed, silently starting an unranked run. | F8 | OPEN |
@@ -215,3 +215,26 @@ F4 does not change physics, scoring, save schema, replay version, local replay p
 - F1, F2 and F3 permanent regressions remain green.
 
 **F4 disposition: PASS. VC-004 closed.**
+
+## F5 implementation record — canonical replay hash retrieval
+
+- Global replay IDs are now normalized exactly once to lowercase before validation and lookup.
+- The canonical validator accepts only 64 hexadecimal characters after normalization.
+- Both lowercase and uppercase request forms resolve to the same canonical lowercase SHA-256 identifier.
+- D1 `best_replay_hash` lookup and R2 `verified/<hash>.json` lookup now use the same canonical lowercase value.
+- This matches the existing `sha256()` implementation, which emits lowercase hexadecimal, and the route layer, which already lowercases `/replay/<hash>` path values.
+- Invalid length/non-hex replay IDs still fail with `invalid-replay`.
+
+F5 changes only global replay retrieval normalization; replay generation, verification, scoring, storage format, save schema and gameplay are unchanged.
+
+### F5 verification evidence
+
+- Lowercase 64-character SHA-256 replay IDs validate unchanged.
+- Uppercase and mixed-case request forms canonicalize to the same lowercase identifier.
+- Invalid-length and non-hex replay IDs remain rejected.
+- D1 owner lookup and R2 replay-object lookup both use the canonical lowercase identifier.
+- The route-level lowercase normalization and lowercase `sha256()` output are consistent with the retrieval helper.
+- The obsolete uppercase-only validator is absent.
+- Worker syntax and F4 replay-resource regression remain green.
+
+**F5 disposition: PASS. VC-005 closed.**
