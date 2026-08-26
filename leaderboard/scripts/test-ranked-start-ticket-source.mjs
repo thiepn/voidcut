@@ -11,11 +11,11 @@ const client = fs.readFileSync(clientPath, 'utf8');
 assert.ok(html.includes("const RANKED_START_WAIT_MS=2000;"), 'inline ranked-start budget missing');
 assert.ok(client.includes("const RANKED_START_WAIT_MS=2000;"), 'source-client ranked-start budget missing');
 
-const helperPattern = /async function acquireLeaderboardTicket\(waitMs=RANKED_START_WAIT_MS\)\{[\s\S]*?\}\nfunction invalidateRankedRun/;
-const inlineHelperEnvelope = html.match(helperPattern);
-assert.ok(inlineHelperEnvelope, 'inline acquireLeaderboardTicket helper missing');
-const inlineHelper = inlineHelperEnvelope[0].replace(/\nfunction invalidateRankedRun[\s\S]*$/, '');
-const clientHelperMatch = client.match(/async function acquireLeaderboardTicket\(waitMs=RANKED_START_WAIT_MS\)\{[^\n]+\}/);
+const helperPattern = /async function acquireLeaderboardTicket\(waitMs=RANKED_START_WAIT_MS\)\{[^\n]+\}/;
+const inlineHelperMatch = html.match(helperPattern);
+assert.ok(inlineHelperMatch, 'inline acquireLeaderboardTicket helper missing');
+const inlineHelper = inlineHelperMatch[0];
+const clientHelperMatch = client.match(helperPattern);
 assert.ok(clientHelperMatch, 'source-client acquireLeaderboardTicket helper missing');
 assert.equal(clientHelperMatch[0], inlineHelper, 'source client and shipped inline acquisition helpers must match');
 
@@ -72,7 +72,7 @@ function makeAcquire(take, prefetch) {
 }
 
 for (const required of [
-  "let leaderboardTicket=null,leaderboardTicketPromise=null,activeLeaderboardTicket=null,pendingLeaderboardSubmission=null,rankedRunInvalidReason=null,rankedRunInvalidNoticeShown=false,rankedTimingIntegrity=null,rankedStartPromise=null;",
+  "let leaderboardTicket=null,leaderboardTicketPromise=null,activeLeaderboardTicket=null,rankedRunInvalidReason=null,rankedRunInvalidNoticeShown=false,rankedTimingIntegrity=null,rankedStartPromise=null,leaderboardSubmissionQueue=[],leaderboardQueueDrainPromise=null,leaderboardQueueRetryTimer=null;",
   "async function start(challenge=null,skipTutorial=false)",
   "if(challenge){launchRun(challenge,skipTutorial,null,null);return}",
   "if(rankedStartPromise)return rankedStartPromise",

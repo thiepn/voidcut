@@ -57,7 +57,7 @@ Until final certification:
 | VC-006 | HIGH | Anonymous rate-limit identity uses IP + attacker-controlled User-Agent and is trivially splittable. | F6 | FIXED — F6 PASS |
 | VC-007 | HIGH | Turnstile backend enforcement is implemented without matching client token acquisition/submission. | F7 | FIXED — F7 PASS |
 | VC-008 | MEDIUM | PLAY can consume no leaderboard ticket if asynchronous prefetch has not completed, silently starting an unranked run. | F8 | FIXED — F8 PASS |
-| VC-009 | MEDIUM | Only one in-memory pending leaderboard submission is retained; later runs/reloads/network failure can lose a valid submission. | F9 | OPEN |
+| VC-009 | MEDIUM | Only one in-memory pending leaderboard submission is retained; later runs/reloads/network failure can lose a valid submission. | F9 | FIXED — F9 PASS |
 | VC-010 | MEDIUM | Profile creation ignores failure to persist/read back local leaderboard identity, potentially orphaning the username/token relationship. | F10 | OPEN |
 | VC-011 | MEDIUM | Local best-replay selection does not use the same score/chamber/time ordering as the global leaderboard. | F11 | OPEN |
 | VC-012 | LOW | Exact-tie self-rank calculation omits the final player-ID tie-break used by leaderboard ordering. | F11 | OPEN |
@@ -313,3 +313,35 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Inline runtime parses successfully, source-client and shipped acquisition helpers match, and F1-F7 permanent regressions remain green.
 
 **F8 disposition: PASS. VC-008 closed.**
+
+## F9 implementation record — persistent multi-entry leaderboard submission queue
+
+- The single volatile `pendingLeaderboardSubmission` slot has been removed.
+- Ranked submissions are now enqueued under the dedicated `voidcut.leaderboard.submissions.v1` local-storage key before any network submission attempt.
+- The queue retains up to 16 distinct ticket/replay entries and never evicts an existing valid entry merely to make room for a later run; a full queue is surfaced explicitly as `GLOBAL QUEUE FULL`.
+- Queue writes are read back immediately. If persistent storage is unavailable, the entry remains in the current in-memory queue as a best-effort volatile fallback and the UI surfaces `GLOBAL QUEUE STORAGE FAILED`.
+- Queue loading rejects malformed entries, de-duplicates ticket IDs and prunes tickets whose server expiry has passed. Corrupt JSON is discarded rather than preventing startup.
+- Submissions drain sequentially so multiple completed runs cannot overwrite each other or create parallel submission storms.
+- Success removes only the successfully handled ticket. The server's verified-ticket idempotence makes an accidental retry after a failed local queue cleanup safe.
+- HTTP 400/403/404/409/410/413/422 responses are treated as terminal for that ticket and remove only that entry; the queue then continues.
+- HTTP 401 preserves the queue, clears the invalid local identity and waits for profile recovery.
+- HTTP 429, network failures and 5xx responses preserve the queue and schedule a bounded 15-second retry while online.
+- Browser `online` and normal menu entry both trigger queue draining, so reload/offline recovery resumes automatically once a valid identity and connectivity are present.
+- Creating a leaderboard profile drains every queued run rather than submitting only the most recent one.
+- No Worker, replay verifier, ticket TTL, scoring, physics, save schema or leaderboard ordering changed in F9.
+
+### F9 verification evidence
+
+- Two distinct ranked ticket/replay pairs coexist in persistent storage without overwrite, and a simulated reload restores both.
+- Duplicate ticket IDs replace their own payload rather than duplicating or removing other queue entries.
+- Expired and malformed entries are pruned safely; corrupt queue JSON fails closed without preventing startup.
+- The 16-entry bound refuses overflow without evicting existing valid queued runs.
+- Persistent-write failure is surfaced while retaining the new entry in the current session for best-effort immediate submission.
+- Every ranked submission is enqueued before a network drain begins.
+- Queue draining is single-flight and sequential across all queued entries.
+- Success and terminal rejection remove only the handled ticket; 401 preserves queued work for identity recovery; 429/network/5xx preserve queued work for retry.
+- Online recovery, menu entry and profile creation all resume draining.
+- The obsolete `pendingLeaderboardSubmission` and direct `submitLeaderboardRun` paths are absent.
+- Inline runtime parses successfully, Worker syntax remains green, and permanent F1-F8 regressions remain green.
+
+**F9 disposition: PASS. VC-009 closed.**
