@@ -1,0 +1,110 @@
+name: F11 canonical leaderboard ranking
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f11-ranking-consistency.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F11 ranking patch
+        run: python3 leaderboard/scripts/f11-fix-ranking-consistency.py
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs ../index.html
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Run F9 persistent queue regression
+        working-directory: leaderboard
+        run: node scripts/test-persistent-submission-queue-source.mjs
+
+      - name: Run F10 identity durability regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-identity-durability-source.mjs
+
+      - name: Run F11 ranking consistency regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-ranking-source.mjs
+
+      - name: Mark F11 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old11='| VC-011 | MEDIUM | Local best-replay selection does not use the same score/chamber/time ordering as the global leaderboard. | F11 | FIXED — VERIFYING |'
+          new11='| VC-011 | MEDIUM | Local best-replay selection does not use the same score/chamber/time ordering as the global leaderboard. | F11 | FIXED — F11 PASS |'
+          old12='| VC-012 | LOW | Exact-tie self-rank calculation omits the final player-ID tie-break used by leaderboard ordering. | F11 | FIXED — VERIFYING |'
+          new12='| VC-012 | LOW | Exact-tie self-rank calculation omits the final player-ID tie-break used by leaderboard ordering. | F11 | FIXED — F11 PASS |'
+          if s.count(old11)!=1 or s.count(old12)!=1:
+              raise SystemExit('F11 verification status markers missing')
+          s=s.replace(old11,new11,1).replace(old12,new12,1)
+          s += '''\n### F11 verification evidence\n\n- Browser and Worker contain byte-identical `compareLeaderboardRank` function text.\n- Comparator tests prove score DESC, chamber DESC, time ASC, timestamp ASC and stable-ID ASC ordering, including null-time fallback.\n- Local competitive-run ranking uses the canonical comparator rather than its previous ad-hoc comparison chain.\n- Best-replay replacement uses the canonical score/chamber/time order, so equal-score deeper and equal-score/equal-chamber faster runs are retained correctly.\n- Worker personal-best prechecks use the same canonical comparator before the transactional D1 conditional update.\n- Global leaderboard rows are selected with the same five-field SQL order, passed through the canonical comparator, and do not expose the internal update timestamp.\n- Self-rank SQL now includes `updated_at = ? AND id < ?` as the final exact-tie predicate, matching `id ASC` in the published leaderboard.\n- An adversarial exact-tie fixture confirms a player with the lexicographically smaller ID ranks ahead when score, chamber, time and update timestamp all match.\n- Inline runtime and Worker syntax pass, and permanent F1-F10 regressions remain green.\n\n**F11 disposition: PASS. VC-011 and VC-012 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F11 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f index.html leaderboard/src/index.js design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-leaderboard-ranking-source.mjs
+          git diff --cached --check
+          git commit -m 'F11: unify leaderboard ranking order'
+          git push origin HEAD:fix/v6.2-hardening
