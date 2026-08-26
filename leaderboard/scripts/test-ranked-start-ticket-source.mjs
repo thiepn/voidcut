@@ -80,7 +80,7 @@ for (const required of [
   "const acquired=await acquireLeaderboardTicket()",
   "if(state!=='starting')return null",
   "launchRun(null,skipTutorial,acquired.ticket,acquired.reason)",
-  "rankedRunInvalidReason=!challenge&&!activeLeaderboardTicket?(rankedStartReason||'LEADERBOARD UNAVAILABLE'):null",
+  "rankedRunInvalidReason=null;rankedRunInvalidNoticeShown=false;if(!challenge&&!activeLeaderboardTicket)rankedRunInvalidReason=rankedStartReason||'LEADERBOARD UNAVAILABLE'",
   "showCoach('LOCAL RUN','A global leaderboard ticket was not available for this start.'",
   "$('play').onclick=()=>start()",
   "const target=activeChallenge;start(target)",
