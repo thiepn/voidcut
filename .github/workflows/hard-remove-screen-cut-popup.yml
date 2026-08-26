@@ -1,0 +1,36 @@
+name: Hard-remove VOIDCUT screen-cut popup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hard-remove-screen-cut-popup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply popup removal patch
+        run: python3 scripts/remove-screen-cut-popup.py
+      - name: Validate game and service worker
+        run: |
+          python3 -c "from pathlib import Path; import re; s=Path('index.html').read_text(); assert 'screenCutFx' not in s and 'screenCutTransition(' not in s and 'screenCutTimer' not in s; js=max(re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>',s,re.S|re.I),key=len); Path('/tmp/voidcut.js').write_text(js)"
+          node --check /tmp/voidcut.js
+          node --check sw.js
+          grep -q "6.1.0-pwa4" sw.js
+          grep -q "await self.skipWaiting()" sw.js
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/hard-remove-screen-cut-popup.yml .github/workflows/remove-screen-cut-popup.yml scripts/remove-screen-cut-popup.py
+          git add index.html sw.js
+          git commit -m "Hard-remove intrusive screen-cut popup"
+          git push
