@@ -1,0 +1,114 @@
+name: F12 backend maintenance hardening
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f12-backend-maintenance.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F12 backend maintenance patch
+        run: python3 leaderboard/scripts/f12-maintenance-hardening.py
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs ../index.html
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Run F9 persistent queue regression
+        working-directory: leaderboard
+        run: node scripts/test-persistent-submission-queue-source.mjs
+
+      - name: Run F10 identity durability regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-identity-durability-source.mjs
+
+      - name: Run F11 ranking consistency regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-ranking-source.mjs
+
+      - name: Run F12 backend maintenance regression
+        working-directory: leaderboard
+        run: python3 scripts/test-backend-maintenance-source.py
+
+      - name: Mark F12 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old13='| VC-013 | MEDIUM | Expired/rejected/used run tickets have no retention cleanup and accumulate indefinitely. | F12 | FIXED — VERIFYING |'
+          new13='| VC-013 | MEDIUM | Expired/rejected/used run tickets have no retention cleanup and accumulate indefinitely. | F12 | FIXED — F12 PASS |'
+          old14='| VC-014 | LOW | Concurrent personal-best updates can leave obsolete/orphaned R2 replay objects. | F12 | FIXED — VERIFYING |'
+          new14='| VC-014 | LOW | Concurrent personal-best updates can leave obsolete/orphaned R2 replay objects. | F12 | FIXED — F12 PASS |'
+          if s.count(old13)!=1 or s.count(old14)!=1:
+              raise SystemExit('F12 verification status markers missing')
+          s=s.replace(old13,new13,1).replace(old14,new14,1)
+          s += '''\n### F12 verification evidence\n\n- Worker and inline runtime syntax remain valid, and permanent F1-F11 regressions remain green.\n- The F12 regression executes the actual D1 trigger SQL in SQLite and proves sequential PB replacements queue both the original best hash and an intermediate winner hash (`h0 → ha → hb` queues `h0` and `ha`). This models the stale-JavaScript-snapshot concurrency defect directly.\n- Every new R2 candidate is placed in `replay_gc_queue` before upload, so a failed conditional PB update or post-upload failure remains discoverable for later GC instead of depending on request-local cleanup.\n- Direct candidate/old-snapshot R2 deletions are absent.\n- Seven-day ticket-retention predicates delete stale used and abandoned-expired rows while preserving recent rows; the regression executes both cleanup statements against SQLite fixtures.\n- Replay GC has a 24-hour grace period, a 50-object batch bound, queue-generation recheck, and live player-reference check before R2 deletion. Referenced hashes have only their stale GC queue entry released.\n- Wrangler declares the 15-minute Cron Trigger and the Worker exports the matching scheduled maintenance handler.\n\n**F12 disposition: PASS. VC-013 and VC-014 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F12 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f leaderboard/src/index.js leaderboard/wrangler.jsonc design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-backend-maintenance-source.py
+          git diff --cached --check
+          git commit -m 'F12: add leaderboard storage maintenance'
+          git push origin HEAD:fix/v6.2-hardening
