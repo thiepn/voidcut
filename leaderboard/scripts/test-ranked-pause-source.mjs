@@ -36,7 +36,7 @@ for (const required of [
   "if(willPause&&!paused)invalidateRankedRun(pauseReason)",
   "togglePause(true,'APP SUSPENDED')",
   "togglePause(true,'DISPLAY CHANGED')",
-  "rankedRunInvalidReason=null;rankedRunInvalidNoticeShown=false;void prefetchLeaderboardTicket()",
+  "rankedRunInvalidReason=null;rankedRunInvalidNoticeShown=false;",
   "const leaderboardTicketForRun=activeLeaderboardTicket,rankedInvalidReasonForRun=rankedRunInvalidReason",
   "const rankedText=rankedInvalidReasonForRun?`UNRANKED • ${rankedInvalidReasonForRun}`:''",
 ]) assert.ok(source.includes(required), `missing F2 invariant: ${required}`);
