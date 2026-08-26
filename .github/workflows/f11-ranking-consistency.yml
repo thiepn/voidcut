@@ -22,7 +22,9 @@ jobs:
           node-version: '22'
 
       - name: Apply F11 ranking patch
-        run: python3 leaderboard/scripts/f11-fix-ranking-consistency.py
+        run: |
+          python3 leaderboard/scripts/f11-fix-ranking-consistency.py
+          python3 leaderboard/scripts/f11-fix-null-ranking.py
 
       - name: Validate inline runtime syntax
         run: |
