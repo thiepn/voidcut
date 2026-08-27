@@ -70,8 +70,8 @@ Until final certification:
 | VC-019 | MEDIUM | Cache-write failures can interfere with otherwise successful network responses instead of degrading gracefully. | F16 | FIXED — F16 PASS |
 | VC-020 | MEDIUM | `visualViewport` resize/scroll handling cancels gestures and resets timing before determining whether the change is significant. | F17 | FIXED — F17 PASS |
 | VC-021 | MEDIUM | Tutorial initialization partially mutates the current simulation instead of fully resetting generation/scoring/briefing state. | F18 | FIXED — F18 PASS |
-| VC-022 | LOW | Cosmetic unlock logic contains unreachable/conflicting branches for IDs already returned as always unlocked. | F19 | OPEN |
-| VC-023 | LOW | Obsolete `.vc-screen-cut` hide rule remains even though the popup DOM/function/calls were removed. | F19 | OPEN |
+| VC-022 | LOW | Cosmetic unlock logic contains unreachable/conflicting branches for IDs already returned as always unlocked. | F19 | FIXED — F19 PASS |
+| VC-023 | LOW | Obsolete `.vc-screen-cut` hide rule remains even though the popup DOM/function/calls were removed. | F19 | FIXED — F19 PASS |
 | VC-024 | MEDIUM | Built-in diagnostics do not exercise live leaderboard API/replay retrieval, ranked timing integrity, or full SW update behavior. | F20 | OPEN |
 | VC-025 | HIGH | Current v6.1/save17/replay9 code has not been run through the old full cross-browser/PWA certification suite. | F21 | OPEN |
 | VC-026 | MEDIUM | Existing release-certification documents describe v6.0/save16/replay8 and stale Daily/PWA behavior. | F27 | OPEN |
@@ -565,3 +565,21 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Service-worker, Worker and inline runtime syntax pass, and permanent F1-F18 regressions are green.
 
 **F18 disposition: PASS. VC-021 closed.**
+
+## F19 implementation record — dead cosmetic branches and screen-cut CSS cleanup
+
+- `cosmeticUnlocked()` keeps its existing unconditional IDs exactly as-is. The unreachable later conditions for `aurora`, `reactor`, `ribbon`, `laser`, and `vacuum` were removed because those IDs already return `true` before any threshold branch can execute. No cosmetic unlock outcome changes.
+- All live conditional unlock branches remain intact (`ember`, `amethyst`, `monochrome`, `hollow`, `prism`, `eclipse`, `comet`, `echo`, `sparks`, `blade`, `arc`, `rift`, `shatter`, `dissolve`, `fracture`).
+- The complete dead `.vc-screen-cut` CSS family was removed, including tone/pane/beam/run rules, `vcCutShell`/`vcCutBeam`/`vcCutPaneA`/`vcCutPaneB` keyframes, the reduced-motion screen-cut selector, physical-sheet overrides, the later global palette override, and the obsolete final hide rule.
+- The unrelated reduced-motion `.rank-up-fx` hide rule remains.
+- No screen-cut DOM/runtime path is reintroduced. No save schema, gameplay, scoring, replay, leaderboard, PWA, tutorial, cosmetic IDs/descriptions/defaults, or actual unlock requirements changed.
+
+### F19 verification evidence
+
+- The canonical always-unlocked cosmetic ID set is unchanged. The five duplicate conditional branches for `aurora`, `reactor`, `ribbon`, `laser`, and `vacuum` are absent.
+- An executable regression verifies all ten always-unlocked IDs remain available on a fresh save, all fifteen progression-based IDs remain locked on a fresh save, and each still unlocks at its existing threshold.
+- No `.vc-screen-cut` selector, screen-cut tone/pane/beam/run CSS, `vcCut*` keyframe, reduced-motion screen-cut selector, physical-sheet override, global palette override, or obsolete final hide rule remains in `index.html`.
+- The unrelated reduced-motion `.rank-up-fx` suppression remains intact.
+- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F19 regressions are green.
+
+**F19 disposition: PASS. VC-022 and VC-023 closed.**
