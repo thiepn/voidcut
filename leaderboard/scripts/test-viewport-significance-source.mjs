@@ -23,42 +23,27 @@ for (const listener of [
 ]) assert.ok(source.includes(listener), `viewport listener contract missing: ${listener}`);
 
 function makeHarness({initial={w:400,h:800,o:'portrait'}, next={w:400,h:800,o:'portrait'}, state='play', paused=false, replayPaused=false}={}) {
-  let viewportState = {...initial};
-  let viewportTimer = 0;
-  let acc = .087;
-  let visualBudget = .42;
-  let last = 1234;
-  let activePointerId = 7;
-  let aim = {o:{x:10,y:20},p:{x:30,y:40}};
-  let timingResets = 0;
-  let timingReason = null;
-  let cancels = 0;
-  let pauses = 0;
-  let coaches = 0;
-  let refreshes = 0;
-  let fitCalls = 0;
-  const replayPauseButton = {textContent:'PAUSE'};
-  const performance = {now:()=>9000};
-  const clearTimeout = () => {};
-  const setTimeout = fn => { fn(); return 1; };
-  function fitViewport(){fitCalls++; return {...next};}
-  function trackRankedTimingReset(reason){timingResets++;timingReason=reason;}
-  function cancelPointerGesture(){cancels++;activePointerId=null;aim=null;}
-  function togglePause(force,reason){assert.equal(force,true);assert.equal(reason,'DISPLAY CHANGED');pauses++;paused=true;}
-  function showCoach(){coaches++;}
-  function refreshFullscreen(){refreshes++;}
-  function $(id){assert.equal(id,'replayPause');return replayPauseButton;}
+  const counts={timingResets:0,timingReason:null,cancels:0,pauses:0,coaches:0,refreshes:0,fitCalls:0};
+  const replayPauseButton={textContent:'PAUSE'};
+  const performance={now:()=>9000};
+  const clearTimeout=()=>{};
+  const setTimeout=fn=>{fn();return 1;};
 
   const api = new Function(
-    'initialState','initialTimer','initialAcc','initialVisualBudget','initialLast','initialPointer','initialAim','initialReplayPaused',
-    'fitViewport','trackRankedTimingReset','cancelPointerGesture','togglePause','showCoach','refreshFullscreen','$','performance','clearTimeout','setTimeout','state','initialPaused',
-    `let viewportState=initialState,viewportTimer=initialTimer,acc=initialAcc,visualBudget=initialVisualBudget,last=initialLast,activePointerId=initialPointer,aim=initialAim,replayPaused=initialReplayPaused,paused=initialPaused;\n${settleSource}\nreturn{run:(force=false)=>settleViewport(force),get:()=>({viewportState,viewportTimer,acc,visualBudget,last,activePointerId,aim,replayPaused,paused})};`
-  )(
-    viewportState, viewportTimer, acc, visualBudget, last, activePointerId, aim, replayPaused,
-    fitViewport, trackRankedTimingReset, cancelPointerGesture, togglePause, showCoach, refreshFullscreen, $, performance, clearTimeout, setTimeout, state, paused,
-  );
+    'initialState','nextState','initialReplayPaused','initialPaused','state','counts','replayPauseButton','performance','clearTimeout','setTimeout','assert',
+    `let viewportState={...initialState},viewportTimer=0,acc=.087,visualBudget=.42,last=1234,activePointerId=7,aim={o:{x:10,y:20},p:{x:30,y:40}},replayPaused=initialReplayPaused,paused=initialPaused;
+     function fitViewport(){counts.fitCalls++;return{...nextState}}
+     function trackRankedTimingReset(reason){counts.timingResets++;counts.timingReason=reason}
+     function cancelPointerGesture(){counts.cancels++;activePointerId=null;aim=null}
+     function togglePause(force,reason){assert.equal(force,true);assert.equal(reason,'DISPLAY CHANGED');counts.pauses++;paused=true}
+     function showCoach(){counts.coaches++}
+     function refreshFullscreen(){counts.refreshes++}
+     function $(id){assert.equal(id,'replayPause');return replayPauseButton}
+     ${settleSource}
+     return{run:(force=false)=>settleViewport(force),get:()=>({viewportState,viewportTimer,acc,visualBudget,last,activePointerId,aim,replayPaused,paused})};`
+  )(initial,next,replayPaused,paused,state,counts,replayPauseButton,performance,clearTimeout,setTimeout,assert);
 
-  return {api, counts:()=>({timingResets,timingReason,cancels,pauses,coaches,refreshes,fitCalls}), replayPauseButton};
+  return {api,counts:()=>({...counts}),replayPauseButton};
 }
 
 {
