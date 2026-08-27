@@ -4,6 +4,8 @@ import path from 'node:path';
 
 const root = path.resolve(process.cwd(), '..');
 const spec = fs.readFileSync(path.join(root, 'tests/pwa-destructive.spec.mjs'), 'utf8');
+const server = fs.readFileSync(path.join(root, 'tests/pwa-test-server.mjs'), 'utf8');
+const config = fs.readFileSync(path.join(root, 'playwright.config.mjs'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/cross-browser-release.yml'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
@@ -24,7 +26,9 @@ for (const invariant of [
   "const IDENTITY_KEY = 'voidcut.leaderboard.identity.v1';",
   "const IDENTITY_BACKUP_KEY = 'voidcut.leaderboard.identity.backup.v1';",
   "const CACHE_PREFIX = 'voidcut-shell-';",
-  'await context.setOffline(true);',
+  "const ORIGIN_OFFLINE_SENTINEL = path.join(ROOT, '.f23-origin-offline');",
+  "sessionStorage.getItem(marker)",
+  'await setOriginOffline(true);',
   'await caches.delete(name)',
   "'./__f23_missing_core_asset__.js'",
   "reg.waiting.postMessage({ type: 'SKIP_WAITING' });",
@@ -33,6 +37,14 @@ for (const invariant of [
   "expect(after.identity).toBeNull();",
   "expect(after.backupIdentity).toBeNull();",
 ]) assert.ok(spec.includes(invariant), `F23 destructive invariant missing: ${invariant}`);
+
+assert.ok(!spec.includes('context.setOffline(true)'), 'browser-level offline emulation must not bypass real service-worker fallback in Firefox/WebKit');
+assert.ok(!spec.includes('context.setOffline(false)'), 'F23 offline state must be owned by the local origin harness');
+assert.ok(server.includes("const OFFLINE_SENTINEL = path.join(ROOT, '.f23-origin-offline');"), 'controllable origin outage sentinel missing');
+assert.ok(server.includes('req.socket.destroy();'), 'origin outage must cause a transport rejection rather than an HTTP error response');
+assert.ok(server.includes("decoded === '/' ? '/index.html'"), 'test server canonical root shell routing missing');
+assert.ok(server.includes("candidate.startsWith(`${ROOT}${path.sep}`)"), 'test server path traversal boundary missing');
+assert.ok(config.includes("command: 'node tests/pwa-test-server.mjs'"), 'Playwright must run through the controllable local origin server');
 
 assert.equal(pkg.scripts?.['test:pwa-destructive'], 'playwright test tests/pwa-destructive.spec.mjs', 'F23 package script missing or changed');
 
