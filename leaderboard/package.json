@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build:verifier": "node scripts/build-verifier.mjs ../index.html",
-    "check": "node --check src/index.js && node --check scripts/build-verifier.mjs"
+    "check": "node --check src/index.js && node --check scripts/build-verifier.mjs",
+    "test:adversarial": "npm run build:verifier && node scripts/test-adversarial-leaderboard.mjs"
   },
   "dependencies": {
     "acorn": "^8.15.0",
