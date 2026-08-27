@@ -180,10 +180,10 @@ assert.equal(replayValidationReason(tooMany), 'valid', 'resource-limit fixture m
 assert.equal(competitiveReplayValidationReason(tooMany), 'resource-limit', '12,000-event competitive ceiling can be bypassed');
 assert.equal(verifyReplay(tooMany), null);
 
-const event = base.events[0];
-assert.equal(replayInputTiming(base, event, event.t), 'due');
-assert.equal(replayInputTiming(base, event, event.t + DT), 'stale');
-assert.equal(replayInputTiming(base, event, Math.max(0, event.t - DT)), 'future');
+const timingEvent = { t: 1 };
+assert.equal(replayInputTiming(base, timingEvent, 1), 'due');
+assert.equal(replayInputTiming(base, timingEvent, 1 + DT), 'stale');
+assert.equal(replayInputTiming(base, timingEvent, 1 - DT), 'future');
 
 // --- Worker auth, ticket, rate-limit and storage attack contracts ----------
 function section(start, end) {

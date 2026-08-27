@@ -252,8 +252,8 @@ async function createProfile(request, env) {
 
 async function startRun(request, env) {
   const token = bearer(request);
-  let player = null;
-  if (token) player = await authenticate(request, env, false);
+  const player = token ? await authenticate(request, env, false) : null;
+  if (token && !player) return error(request, 401, 'invalid-profile', 'Leaderboard identity is invalid.');
   const key = player?.id || preauthKey(request);
   const { success } = await env.RUN_LIMIT.limit({ key });
   if (!success) return error(request, 429, 'rate-limited', 'Too many run tickets requested.');
@@ -312,8 +312,7 @@ async function replayResponse(request, env, hash) {
 async function forwardSubmission(request, env, ticketId) {
   const token = bearer(request);
   if (!token) return error(request, 401, 'profile-required', 'Create a leaderboard profile first.');
-  const tokenKey = await sha256(token);
-  const { success } = await env.SUBMIT_LIMIT.limit({ key: tokenKey });
+  const { success } = await env.SUBMIT_LIMIT.limit({ key: preauthKey(request) });
   if (!success) return error(request, 429, 'rate-limited', 'Too many score submissions.');
   const len = Number(request.headers.get('Content-Length') || 0);
   if (len && len > MAX_REPLAY_BYTES) return error(request, 413, 'replay-too-large', 'Replay is too large.');
@@ -336,6 +335,7 @@ export class ReplayVerifier extends DurableObject {
     if (!player) return error(request, 401, 'invalid-profile', 'Leaderboard identity is invalid.');
     const ticket = await this.env.DB.prepare('SELECT * FROM run_tickets WHERE id=? LIMIT 1').bind(ticketId).first();
     if (!ticket) return error(request, 404, 'invalid-ticket', 'Run ticket was not found.');
+    if (ticket.player_id && ticket.player_id !== player.id) return error(request, 403, 'ticket-owner-mismatch', 'This run ticket belongs to another leaderboard profile.');
     if (ticket.status === 'verified') {
       const p = await playerSnapshot(this.env, player.id);
       return json(request, { ok: true, verified: true, personalBest: p?.best_replay_hash === ticket.replay_hash, score: ticket.result_score, chamber: ticket.result_chamber, grade: ticket.result_grade, replayHash: ticket.replay_hash, rank: await rankForPlayer(this.env, p) });
@@ -345,7 +345,6 @@ export class ReplayVerifier extends DurableObject {
       await this.env.DB.prepare("UPDATE run_tickets SET status='expired',used_at=? WHERE id=? AND used_at IS NULL").bind(Date.now(), ticketId).run();
       return error(request, 410, 'ticket-expired', 'This ranked run ticket expired.');
     }
-    if (ticket.player_id && ticket.player_id !== player.id) return error(request, 403, 'ticket-owner-mismatch', 'This run ticket belongs to another leaderboard profile.');
 
     let text;
     try {
