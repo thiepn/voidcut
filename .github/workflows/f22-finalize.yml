@@ -1,0 +1,47 @@
+name: F22 finalize adversarial certification
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f22-finalize.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Record F22 PASS
+        run: python3 .github/scripts/f22-finalize-register.py
+
+      - name: Recheck permanent F22 contracts
+        working-directory: leaderboard
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run test:adversarial
+          node scripts/test-adversarial-release-suite-source.mjs
+          node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Remove temporary F22 patch helpers
+        run: |
+          rm -f leaderboard/scripts/f22-harden-anticheat.py
+          rm -f leaderboard/scripts/f22-correct-timing-fixture.py
+
+      - name: Commit F22 certification record
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/f22-harden-anticheat.py leaderboard/scripts/f22-correct-timing-fixture.py
+          git diff --cached --check
+          git commit -m 'F22: record adversarial leaderboard certification pass'
+          git push origin HEAD:fix/v6.2-hardening
