@@ -4,10 +4,9 @@ import assert from 'node:assert/strict';
 const root = new URL('../../', import.meta.url);
 const sw = fs.readFileSync(new URL('sw.js', root), 'utf8');
 
-assert.ok(sw.includes("const VOIDCUT_CACHE_VERSION = '6.1.0-pwa4';"), 'F14 must not change the F16 cache revision contract');
 assert.match(sw, /if \(type === 'SKIP_WAITING'\) \{\s*self\.skipWaiting\(\);\s*\}/, 'F14 must preserve explicit SKIP_WAITING message handling');
 assert.ok(sw.includes("const response = await fetch(request, { cache: 'no-store' });"), 'navigation must remain network-first/no-store');
-assert.ok(sw.includes("const fallback = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });"), 'offline navigation must retain canonical index fallback');
+assert.ok(sw.includes("const fallback = cache ? await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true }) : null;"), 'offline navigation must retain canonical index fallback even when Cache Storage is unavailable');
 
 const helperMatch = sw.match(/function isVoidcutShellUrl\(value\) \{[\s\S]*?function shouldCacheVoidcutShellResponse\(requestUrl, response\) \{[\s\S]*?\n\}/);
 assert.ok(helperMatch, 'F14 shell cache eligibility helpers are missing');
@@ -89,14 +88,14 @@ assert.equal(
   'response without a final URL must fail closed',
 );
 
-assert.match(sw, /if \(shouldCacheVoidcutShellResponse\(url, response\)\) \{\s*await cache\.put\(VOIDCUT_INDEX_URL, response\.clone\(\)\);\s*\}/,
-  'canonical index cache write must be guarded by F14 eligibility helper');
+assert.match(sw, /if \(shouldCacheVoidcutShellResponse\(url, response\)\) \{\s*const cache = await openVoidcutCache\(\);\s*await cacheVoidcutResponse\(cache, VOIDCUT_INDEX_URL, response\);\s*\}/,
+  'canonical index cache write must remain guarded by F14 eligibility helper');
 assert.doesNotMatch(sw, /if \(response && response\.ok\) \{\s*await cache\.put\(VOIDCUT_INDEX_URL, response\.clone\(\)\);\s*\}/,
   'obsolete unconditional navigation shell cache write must be absent');
 
 const navBlock = sw.match(/if \(request\.mode === 'navigate'\) \{[\s\S]*?\n  \}\n\n  if \(VOIDCUT_CORE_SET/);
 assert.ok(navBlock, 'navigation fetch block missing');
-assert.equal((navBlock[0].match(/cache\.put\(VOIDCUT_INDEX_URL/g) || []).length, 1, 'navigation path must have exactly one canonical shell write site');
+assert.equal((navBlock[0].match(/cacheVoidcutResponse\(cache, VOIDCUT_INDEX_URL, response\)/g) || []).length, 1, 'navigation path must have exactly one canonical shell write site');
 assert.ok(navBlock[0].includes('shouldCacheVoidcutShellResponse(url, response)'), 'the only navigation shell write must be eligibility-guarded');
 
 console.log('F14 service-worker navigation shell cache isolation PASS');

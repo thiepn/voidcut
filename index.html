@@ -3143,7 +3143,7 @@ window.addEventListener('appinstalled',()=>{deferredInstall=null;refreshInstall(
 installBtn.onclick=async()=>{if(!deferredInstall)return;const p=deferredInstall;deferredInstall=null;refreshInstall();try{await p.prompt();await p.userChoice}catch{}};
 updateBtn.onclick=()=>{const waiting=swRegistration?.waiting;if(!waiting){updateReady=false;refreshUpdate();return}if(updateApplying)return;if(!persist()){refreshUpdate();showCoach('SAVE FAILED','Update was not applied.','Free browser storage or export a backup, then retry.',1800);return}updateApplying=true;refreshUpdate();try{waiting.postMessage({type:'SKIP_WAITING'})}catch{updateApplying=false;syncWaitingUpdate();showCoach('UPDATE FAILED','Update was not applied.','Retry when the update is ready.',1600)}};
 const historicalMastery=syncHistoricalChallenges(true);sanitizeCosmetics(save);if(historicalMastery.length||!saveStorageStatus().primaryValid)persist();rebuildRenderGeometry();viewportState=fitViewport();applyUiProductionPolish();vd7Initialize();renderToggles();applyAccessibilityClasses();vd6InitUtilityLayer();renderCosmetics();showMenu();refreshInstall();refreshFullscreen();requestAnimationFrame(update);
-if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{scope:'./'}).then(reg=>{watchRegistration(reg);reg.update().catch(()=>{})}).catch(()=>{}));
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))window.addEventListener('load',()=>{const workerUrl=`./sw.js?build=${encodeURIComponent(BUILD_ID)}`;navigator.serviceWorker.register(workerUrl,{scope:'./',updateViaCache:'none'}).then(reg=>{watchRegistration(reg);reg.update().catch(()=>{})}).catch(()=>{})});
 })();
 </script>
 </body>

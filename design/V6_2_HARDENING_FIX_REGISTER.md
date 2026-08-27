@@ -66,8 +66,8 @@ Until final certification:
 | VC-015 | MEDIUM | Top-level Worker route try/catch does not await async route handlers consistently, weakening controlled error handling. | F13 | FIXED — F13 PASS |
 | VC-016 | HIGH | Service worker can cache an arbitrary successful same-scope navigation response under the canonical `index.html` shell key. | F14 | FIXED — F14 PASS |
 | VC-017 | MEDIUM | `skipWaiting()` automatic activation conflicts with UI logic that expects a waiting service worker for manual update activation. | F15 | FIXED — F15 PASS |
-| VC-018 | MEDIUM | Cache freshness for core design assets relies on manually changing the SW cache revision; mixed old/new assets are possible after an incomplete release update. | F16 | OPEN |
-| VC-019 | MEDIUM | Cache-write failures can interfere with otherwise successful network responses instead of degrading gracefully. | F16 | OPEN |
+| VC-018 | MEDIUM | Cache freshness for core design assets relies on manually changing the SW cache revision; mixed old/new assets are possible after an incomplete release update. | F16 | FIXED — F16 PASS |
+| VC-019 | MEDIUM | Cache-write failures can interfere with otherwise successful network responses instead of degrading gracefully. | F16 | FIXED — F16 PASS |
 | VC-020 | MEDIUM | `visualViewport` resize/scroll handling cancels gestures and resets timing before determining whether the change is significant. | F17 | OPEN |
 | VC-021 | MEDIUM | Tutorial initialization partially mutates the current simulation instead of fully resetting generation/scoring/briefing state. | F18 | OPEN |
 | VC-022 | LOW | Cosmetic unlock logic contains unreachable/conflicting branches for IDs already returned as always unlocked. | F19 | OPEN |
@@ -498,3 +498,30 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Service-worker, Worker and inline runtime syntax pass, and permanent F1-F15 regressions are green.
 
 **F15 disposition: PASS. VC-017 closed.**
+
+## F16 implementation record — build-bound PWA caching and failure isolation
+
+- The independent manually maintained `VOIDCUT_CACHE_VERSION` has been removed. The worker cache namespace is derived from the canonical application `BUILD_ID` carried in the registered service-worker URL (`sw.js?build=...`).
+- Registration uses the existing trusted local `BUILD_ID` and `updateViaCache: 'none'`; changing the canonical release build therefore changes the worker script URL/cache generation without a second PWA revision that can be forgotten.
+- The worker validates the build query value before using it in a Cache Storage name and falls back to `unversioned` for malformed/manual registrations.
+- Install precaching uses `Request(..., {cache:'reload'})` for every core URL, bypassing a stale HTTP-cache hit while building a new generation. Build-specific cache names prevent a waiting F15 update from mutating the cache used by the currently active worker.
+- Core non-navigation assets are now network-first with `cache:'no-cache'` and Cache Storage fallback on network failure. Online clients therefore revalidate core design assets instead of remaining indefinitely cache-first until a manual SW revision bump.
+- Navigation remains F14 network-first/no-store and retains only the canonical-index offline fallback.
+- Runtime Cache Storage open/write failures are isolated: a successful network navigation/core response is returned even if Cache Storage is unavailable, quota-limited, or `cache.put()` rejects. Cache writes are best-effort and emit a warning rather than becoming response failures.
+- Install-time precache failure remains strict, because activating a newly installed offline-capable worker without a complete initial core bundle would be less safe than failing that installation.
+- F15 manual waiting/activation behavior remains intact; no install-time `skipWaiting()` was reintroduced.
+- No gameplay, balance, leaderboard, replay, save-schema, scoring, UI or visual-design behavior changed in F16.
+
+### F16 verification evidence
+
+- The worker no longer contains an independent `VOIDCUT_CACHE_VERSION`; Cache Storage generation is derived from the validated `build` query carried by the service-worker script URL.
+- Client registration constructs that URL from the canonical runtime `BUILD_ID` and uses `updateViaCache: 'none'`, so release identity and PWA generation cannot drift through a forgotten second revision.
+- Install uses build-specific cache names and `Request(..., {cache:'reload'})` for the complete core set. F15 still permits the new worker to wait without modifying the active worker's previous-generation cache.
+- Core non-navigation requests are network-first with `cache:'no-cache'`, successful responses are persisted best-effort, and network failure falls back to the current build cache.
+- Navigation remains network-first/no-store with F14 canonical-shell eligibility and offline index fallback.
+- `caches.open()` and `cache.put()` failures are explicitly caught. Regression fixtures force both failures and confirm they degrade to null/false rather than escaping.
+- Navigation/core source-order assertions confirm successful network responses are obtained before runtime cache access/write can fail, and no direct fallible `cache.put()` remains in those response paths.
+- Install-time cache population remains strict so a brand-new worker cannot report successful installation with an incomplete offline core bundle.
+- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F16 regressions are green.
+
+**F16 disposition: PASS. VC-018 and VC-019 closed.**

@@ -5,8 +5,6 @@ const root = new URL('../../', import.meta.url);
 const sw = fs.readFileSync(new URL('sw.js', root), 'utf8');
 const html = fs.readFileSync(new URL('index.html', root), 'utf8');
 
-assert.ok(sw.includes("const VOIDCUT_CACHE_VERSION = '6.1.0-pwa4';"), 'F15 must not change F16 cache revision');
-
 const installBlock = sw.match(/self\.addEventListener\('install',[\s\S]*?\n\}\);/);
 assert.ok(installBlock, 'service-worker install handler missing');
 assert.doesNotMatch(installBlock[0], /skipWaiting\s*\(/, 'install must not force an updated worker past waiting state');
@@ -102,7 +100,7 @@ assert.ok(persistAt >= 0 && applyingAt > persistAt && postAt > applyingAt, 'save
 assert.ok(click.includes("catch{updateApplying=false;syncWaitingUpdate();showCoach('UPDATE FAILED'"), 'postMessage failure must recover UI state');
 assert.ok(!click.includes('swRegistration.waiting.postMessage'), 'handler must post to the captured waiting worker, avoiding registration races');
 
-assert.match(html, /navigator\.serviceWorker\.register\('\.\/sw\.js',\{scope:'\.\/'\}\)\.then\(reg=>\{watchRegistration\(reg\);reg\.update\(\)\.catch\(\(\)=>\{\}\)\}\)/,
+assert.match(html, /navigator\.serviceWorker\.register\(workerUrl,\{scope:'\.\/',updateViaCache:'none'\}\)\.then\(reg=>\{watchRegistration\(reg\);reg\.update\(\)\.catch\(\(\)=>\{\}\)\}\)/,
   'registration must continue to watch lifecycle and proactively check for updates');
 
 console.log('F15 PWA manual update lifecycle regression PASS');
