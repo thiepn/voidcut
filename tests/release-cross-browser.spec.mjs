@@ -72,7 +72,9 @@ async function installApiFixtures(page) {
 async function seedSave(page, overrides = {}) {
   const seed = { ...baseSave, ...overrides, settings: { ...baseSave.settings, ...(overrides.settings || {}) } };
   await page.addInitScript(value => {
-    localStorage.setItem('voidcut.standalone.v1', JSON.stringify(value));
+    if (!localStorage.getItem('voidcut.standalone.v1')) {
+      localStorage.setItem('voidcut.standalone.v1', JSON.stringify(value));
+    }
   }, seed);
 }
 
