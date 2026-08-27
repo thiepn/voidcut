@@ -46,7 +46,7 @@ for (const forbidden of ['thiepn.github.io/voidcut', 'thiepn.dev/voidcut']) {
 
 assert.match(workflow, /matrix:\s*\n\s*browser:\s*\[chromium, firefox, webkit\]/, 'CI must use an explicit three-browser matrix');
 assert.ok(workflow.includes('npx playwright install --with-deps ${{ matrix.browser }}'), 'CI must install the exact matrix browser with system dependencies');
-assert.ok(workflow.includes('npx playwright test --project=${{ matrix.browser }}'), 'CI must run only the matrix browser project per isolated job');
+assert.ok(workflow.includes('npx playwright test tests/release-cross-browser.spec.mjs --project=${{ matrix.browser }}'), 'CI must run the F21 browser corpus only in the matrix browser project per isolated job');
 for (let phase = 1; phase <= 20; phase++) {
   const marker = phase === 12 ? 'test-backend-maintenance-source.py' : phase === 20 ? 'test-expanded-diagnostics-source.mjs' : null;
   if (marker) assert.ok(workflow.includes(marker), `F${phase} regression missing from release suite`);
