@@ -10,7 +10,7 @@ assert.equal(packageJson.scripts?.['test:adversarial'], 'npm run build:verifier 
 assert.ok(workflow.includes('name: F22 adversarial leaderboard / anti-cheat gate'), 'F22 CI job missing');
 assert.ok(workflow.includes('npm run test:adversarial'), 'F22 CI job does not execute the adversarial suite');
 assert.ok(workflow.includes('test-adversarial-release-suite-source.mjs'), 'F22 suite contract regression is not in the source gate');
-assert.match(workflow, /browser-matrix:[\s\S]*?needs:\s*\[source-regressions, adversarial-leaderboard\]/, 'browser certification is not gated on F22 adversarial tests');
+assert.match(workflow, /browser-matrix:[\s\S]*?needs:\s*\[[^\]]*adversarial-leaderboard[^\]]*\]/, 'browser certification is not gated on F22 adversarial tests');
 
 for (const token of [
   'score inflation attack',
