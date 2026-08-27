@@ -133,3 +133,5 @@ jobs:
           git diff --cached --check
           git commit -m 'F17: gate viewport resets by significance'
           git push origin HEAD:fix/v6.2-hardening
+
+# rerun after correcting executable regression harness scope
