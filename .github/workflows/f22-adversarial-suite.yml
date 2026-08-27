@@ -1,0 +1,60 @@
+name: F22 adversarial leaderboard implementation
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f22-adversarial-suite.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F22 anti-cheat hardening
+        run: python3 leaderboard/scripts/f22-harden-anticheat.py
+
+      - name: Install verifier build dependencies
+        working-directory: leaderboard
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Run F22 adversarial corpus
+        working-directory: leaderboard
+        run: npm run test:adversarial
+
+      - name: Validate F22 release-suite contract
+        working-directory: leaderboard
+        run: node scripts/test-adversarial-release-suite-source.mjs
+
+      - name: Recheck relevant hardening regressions
+        working-directory: leaderboard
+        run: |
+          node scripts/test-replay-timing-source.mjs ../index.html
+          node scripts/test-replay-resource-limits-source.mjs ../index.html
+          node scripts/test-anonymous-rate-limit-source.mjs
+          node scripts/test-ranked-start-ticket-source.mjs
+          node scripts/test-leaderboard-ranking-source.mjs
+          python3 scripts/test-backend-maintenance-source.py
+
+      - name: Commit F22 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add leaderboard/src/index.js .github/workflows/cross-browser-release.yml
+          git diff --cached --check
+          git commit -m 'F22: harden leaderboard adversarial defenses'
+          git push origin HEAD:fix/v6.2-hardening
