@@ -1,0 +1,139 @@
+name: F18 tutorial simulation reset
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f18-tutorial-reset.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F18 tutorial reset patch
+        run: python3 leaderboard/scripts/f18-fix-tutorial-reset.py
+
+      - name: Validate service worker syntax
+        run: node --check sw.js
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Run F9 persistent queue regression
+        working-directory: leaderboard
+        run: node scripts/test-persistent-submission-queue-source.mjs
+
+      - name: Run F10 identity durability regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-identity-durability-source.mjs
+
+      - name: Run F11 ranking consistency regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-ranking-source.mjs
+
+      - name: Run F12 backend maintenance regression
+        working-directory: leaderboard
+        run: python3 scripts/test-backend-maintenance-source.py
+
+      - name: Run F13 Worker error-boundary regression
+        working-directory: leaderboard
+        run: node scripts/test-worker-route-error-boundary-source.mjs
+
+      - name: Run F14 navigation shell cache regression
+        working-directory: leaderboard
+        run: node scripts/test-service-worker-navigation-cache-source.mjs
+
+      - name: Run F15 PWA update lifecycle regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-update-lifecycle-source.mjs
+
+      - name: Run F16 PWA cache freshness regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-cache-freshness-source.mjs
+
+      - name: Run F17 viewport significance regression
+        working-directory: leaderboard
+        run: node scripts/test-viewport-significance-source.mjs
+
+      - name: Run F18 tutorial reset regression
+        working-directory: leaderboard
+        run: node scripts/test-tutorial-reset-source.mjs
+
+      - name: Mark F18 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old='| VC-021 | MEDIUM | Tutorial initialization partially mutates the current simulation instead of fully resetting generation/scoring/briefing state. | F18 | FIXED — VERIFYING |'
+          new='| VC-021 | MEDIUM | Tutorial initialization partially mutates the current simulation instead of fully resetting generation/scoring/briefing state. | F18 | FIXED — F18 PASS |'
+          if s.count(old)!=1:
+              raise SystemExit('F18 verification status marker missing')
+          s=s.replace(old,new,1)
+          s += '''\n### F18 verification evidence\n\n- `configureTutorialStage()` invokes `sim.reset(seed, 2, 4, 9)` before installing any training arena/plan/core state.\n- An executable regression starts with deliberately dirty generation, scoring, run-clock, briefing, modifier, cut, region and core state and proves the tutorial begins from canonical reset values.\n- The regression verifies arena generation 2, director generation 4, scoring version 9, zero run clock/score/stat accumulators, cleared generated-history fields, `briefingRemaining=0`, `modifierTick=-1`, no inherited cut, fresh training regions/cores, and zero chamber counters.\n- Reset ordering is asserted: canonical reset occurs before the deterministic tutorial arena is installed.\n- Lesson retry, lesson transition and death-retry paths still route through `configureTutorialStage()`, and an executed retry fixture proves dirty lesson state is reset again.\n- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F18 regressions are green.\n\n**F18 disposition: PASS. VC-021 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F18 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f index.html design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-tutorial-reset-source.mjs
+          git diff --cached --check
+          git commit -m 'F18: fully reset tutorial simulation state'
+          git push origin HEAD:fix/v6.2-hardening
