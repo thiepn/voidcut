@@ -36,6 +36,7 @@ for (const invariant of [
   'localStorage.clear()',
   "expect(after.identity).toBeNull();",
   "expect(after.backupIdentity).toBeNull();",
+  "expect(after.queue).toEqual([]);",
 ]) assert.ok(spec.includes(invariant), `F23 destructive invariant missing: ${invariant}`);
 
 assert.ok(!spec.includes('context.setOffline(true)'), 'browser-level offline emulation must not bypass real service-worker fallback in Firefox/WebKit');

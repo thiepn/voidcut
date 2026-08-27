@@ -128,12 +128,13 @@ async function durableSnapshot(page) {
     const unwrapSave = value => value?.d || value || null;
     const identity = parse(localStorage.getItem(identityKey));
     const backup = parse(localStorage.getItem(backupKey));
+    const queue = parse(localStorage.getItem(queueKey));
     const unwrapIdentity = value => value?.d || value || null;
     return {
       save: unwrapSave(save),
       identity: unwrapIdentity(identity),
       backupIdentity: unwrapIdentity(backup),
-      queuePresent: localStorage.getItem(queueKey) != null,
+      queue: Array.isArray(queue) ? queue : [],
     };
   }, { saveKey: SAVE_KEY, identityKey: IDENTITY_KEY, backupKey: IDENTITY_BACKUP_KEY, queueKey: QUEUE_KEY });
 }
@@ -421,7 +422,7 @@ test('F23 deliberate localStorage loss boots a clean save offline and does not r
   expect(after.save?.totalRuns).toBe(0);
   expect(after.identity).toBeNull();
   expect(after.backupIdentity).toBeNull();
-  expect(after.queuePresent).toBe(false);
+  expect(after.queue).toEqual([]);
   expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   expect(errors).toEqual([]);
 });
