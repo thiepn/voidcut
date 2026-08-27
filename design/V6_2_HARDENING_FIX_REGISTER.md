@@ -73,7 +73,7 @@ Until final certification:
 | VC-022 | LOW | Cosmetic unlock logic contains unreachable/conflicting branches for IDs already returned as always unlocked. | F19 | FIXED — F19 PASS |
 | VC-023 | LOW | Obsolete `.vc-screen-cut` hide rule remains even though the popup DOM/function/calls were removed. | F19 | FIXED — F19 PASS |
 | VC-024 | MEDIUM | Built-in diagnostics do not exercise live leaderboard API/replay retrieval, ranked timing integrity, or full SW update behavior. | F20 | FIXED — F20 PASS |
-| VC-025 | HIGH | Current v6.1/save17/replay9 code has not been run through the old full cross-browser/PWA certification suite. | F21 | OPEN |
+| VC-025 | HIGH | Current v6.1/save17/replay9 code has not been run through the old full cross-browser/PWA certification suite. | F21 | FIXED — F21 PASS |
 | VC-026 | MEDIUM | Existing release-certification documents describe v6.0/save16/replay8 and stale Daily/PWA behavior. | F27 | OPEN |
 | VC-027 | LOW | Leaderboard identity is outside the normal full-save export/import path; profile ownership is not portable/recoverable through the current backup flow. | F10/F24 | FIXED — F10 PASS; F24 AUDIT PENDING |
 
@@ -84,7 +84,7 @@ The following phases are gates rather than single defects and remain mandatory:
 | Phase | Gate | Status |
 |---|---|---|
 | F20 | Expand internal regression diagnostics | PASS |
-| F21 | Restore automated cross-browser release suite for current contracts | NOT STARTED |
+| F21 | Restore automated cross-browser release suite for current contracts | PASS |
 | F22 | Adversarial leaderboard / anti-cheat test suite | NOT STARTED |
 | F23 | Destructive PWA lifecycle testing | NOT STARTED |
 | F24 | Save migration, corruption and recovery audit | NOT STARTED |
@@ -601,3 +601,17 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Service-worker, Worker and inline runtime syntax pass, and permanent F1-F20 regressions are green.
 
 **F20 disposition: PASS. VC-024 closed.**
+
+## F21 implementation record — automated current-contract cross-browser certification
+
+- Restored a persistent Playwright-based browser release suite in the repository, pinned to `@playwright/test` 1.62.1 and configured for Chromium, Firefox and WebKit/Safari-equivalent behavior.
+- The suite serves the hardening checkout locally and fixtures leaderboard reads/tickets inside the browser process, so certification does not mutate the production deployment or production leaderboard.
+- A permanent source/regression job runs service-worker, Worker and inline-runtime syntax plus all F1-F21 source regressions before browser jobs are allowed to start.
+- Each browser runs in an isolated CI job with failure traces, screenshots, video and reports retained as artifacts when a test fails.
+- Real-browser coverage includes current release metadata (build 6.1.0, save 17, replay 9, arena 2, director 6), desktop/mobile responsive bounds, transactional save persistence through a UI setting change and reload, keyboard pause/resume, real mouse pointer input, native touch input, and uncaught page-error detection.
+- The browser suite runs the built-in FULL RELEASE CHECK and requires the current deterministic/replay contract checks to pass, including strict replay-v9 input timing, high-score replay round-trip and same-seed determinism.
+- The PWA test changes only the isolated checkout's service-worker bytes, calls `registration.update()`, proves the update reaches `registration.waiting` without replacing the active controller, verifies the UI exposes `UPDATE READY`, and then proves activation/reload occurs only after the explicit update button is pressed.
+- Two harness defects were caught before certification was accepted: the first seed helper overwrote the saved setting again on reload, and synthetic DOM PointerEvents did not establish a browser-native pointer eligible for `setPointerCapture`. The final suite seeds only an absent save and uses Playwright's native touchscreen input while keeping a separate real mouse-drag path. Production behavior was not weakened to accommodate either test artifact.
+- Final certification workflow `33074270574` passed its F1-F21 source gate and all three browser jobs: Chromium PASS, Firefox PASS and WebKit PASS.
+
+**F21 disposition: PASS. VC-025 closed.**
