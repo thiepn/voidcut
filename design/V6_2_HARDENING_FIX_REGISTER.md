@@ -69,7 +69,7 @@ Until final certification:
 | VC-018 | MEDIUM | Cache freshness for core design assets relies on manually changing the SW cache revision; mixed old/new assets are possible after an incomplete release update. | F16 | FIXED — F16 PASS |
 | VC-019 | MEDIUM | Cache-write failures can interfere with otherwise successful network responses instead of degrading gracefully. | F16 | FIXED — F16 PASS |
 | VC-020 | MEDIUM | `visualViewport` resize/scroll handling cancels gestures and resets timing before determining whether the change is significant. | F17 | FIXED — F17 PASS |
-| VC-021 | MEDIUM | Tutorial initialization partially mutates the current simulation instead of fully resetting generation/scoring/briefing state. | F18 | OPEN |
+| VC-021 | MEDIUM | Tutorial initialization partially mutates the current simulation instead of fully resetting generation/scoring/briefing state. | F18 | FIXED — F18 PASS |
 | VC-022 | LOW | Cosmetic unlock logic contains unreachable/conflicting branches for IDs already returned as always unlocked. | F19 | OPEN |
 | VC-023 | LOW | Obsolete `.vc-screen-cut` hide rule remains even though the popup DOM/function/calls were removed. | F19 | OPEN |
 | VC-024 | MEDIUM | Built-in diagnostics do not exercise live leaderboard API/replay retrieval, ranked timing integrity, or full SW update behavior. | F20 | OPEN |
@@ -545,3 +545,23 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Service-worker, Worker and inline runtime syntax pass, and permanent F1-F17 regressions are green.
 
 **F17 disposition: PASS. VC-020 closed.**
+
+## F18 implementation record — canonical simulation reset before tutorial geometry
+
+- Every entry into `configureTutorialStage()` now begins from the canonical simulation reset path: `sim.reset(seed, 2, 4, 9)`. Tutorial initialization no longer depends on a hand-maintained subset of run/scoring fields.
+- The tutorial uses arena generation 2, director generation 4 and scoring version 9. Director generation 4 matches the tutorial training plan and prevents generation-5/6 briefing gates from leaking into training input.
+- After the canonical reset's throwaway generated chamber, tutorial setup resets the RNG to the deterministic lesson seed and explicitly clears generated-history fields (`previousArena`, `previousStyle`, `previousTempo`, `previousPressure`, `previousModifier`), `briefingRemaining`, and `modifierTick` before installing training geometry.
+- Canonical reset therefore owns run clock, score/stat accumulators, generation/scoring contracts, current chamber transient state and baseline entity state; the tutorial code only applies lesson-specific chamber number, deterministic arena/cores, plan and rendering/HUD state.
+- Lesson retries and lesson transitions also pass through the same full reset because both call `configureTutorialStage()`.
+- No gameplay balance, normal-run generation, replay format, leaderboard behavior, save schema, PWA behavior or visual design changed in F18.
+
+### F18 verification evidence
+
+- `configureTutorialStage()` invokes `sim.reset(seed, 2, 4, 9)` before installing any training arena/plan/core state.
+- An executable regression starts with deliberately dirty generation, scoring, run-clock, briefing, modifier, cut, region and core state and proves the tutorial begins from canonical reset values.
+- The regression verifies arena generation 2, director generation 4, scoring version 9, zero run clock/score/stat accumulators, cleared generated-history fields, `briefingRemaining=0`, `modifierTick=-1`, no inherited cut, fresh training regions/cores, and zero chamber counters.
+- Reset ordering is asserted: canonical reset occurs before the deterministic tutorial arena is installed.
+- Lesson retry, lesson transition and death-retry paths still route through `configureTutorialStage()`, and an executed retry fixture proves dirty lesson state is reset again.
+- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F18 regressions are green.
+
+**F18 disposition: PASS. VC-021 closed.**
