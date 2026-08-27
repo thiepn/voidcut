@@ -15,7 +15,7 @@ for (const project of ['chromium', 'firefox', 'webkit']) {
   assert.ok(workflow.includes(project), `${project} CI matrix entry missing`);
 }
 assert.ok(config.includes("serviceWorkers: 'allow'"), 'real service-worker behavior must remain enabled');
-assert.ok(config.includes("python3 -m http.server 4173"), 'suite must serve the branch locally instead of using production');
+assert.ok(config.includes("node tests/pwa-test-server.mjs"), 'suite must use the controllable local branch server instead of production');
 assert.ok(config.includes('workers: 1'), 'SW mutation/update probe must remain serial within a browser job');
 
 for (const token of [
