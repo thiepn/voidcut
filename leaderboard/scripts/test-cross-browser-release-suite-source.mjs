@@ -25,7 +25,10 @@ for (const token of [
   "'director-generation': String(DIRECTOR_GENERATION)",
   "JSON.parse(localStorage.getItem('voidcut.standalone.v1'))",
   "page.keyboard.press('Space')",
-  "pointerType: 'touch'",
+  'page.mouse.down()',
+  'page.mouse.move(',
+  'page.touchscreen.tap(',
+  'hasTouch: true',
   'GLOBAL COMPETITION AUDIT • PASS',
   'Strict replay input timing PASS',
   'High-score replay round-trip PASS',
@@ -35,6 +38,7 @@ for (const token of [
   "toHaveText('UPDATE READY')",
   "page.locator('#updateApp').click()",
 ]) assert.ok(spec.includes(token), `cross-browser contract missing: ${token}`);
+assert.ok(!spec.includes("dispatchEvent('pointerdown'"), 'touch certification must use native browser input rather than synthetic PointerEvents');
 
 for (const forbidden of ['thiepn.github.io/voidcut', 'thiepn.dev/voidcut']) {
   assert.ok(!spec.includes(forbidden), 'browser suite must not target deployed production pages');
