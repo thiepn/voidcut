@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SW_PATH = path.join(ROOT, 'sw.js');
+const ORIGIN_OFFLINE_SENTINEL = path.join(ROOT, '.f23-origin-offline');
 const API = 'https://voidcut-leaderboard.thiepn.workers.dev';
 const SAVE_KEY = 'voidcut.standalone.v1';
 const IDENTITY_KEY = 'voidcut.leaderboard.identity.v1';
@@ -39,6 +40,11 @@ const legacyIdentity = {
   name: 'F23Tester',
   token: 'f23-test-token-0000000000000001',
 };
+
+async function setOriginOffline(offline) {
+  if (offline) await fs.writeFile(ORIGIN_OFFLINE_SENTINEL, 'offline\n', 'utf8');
+  else await fs.rm(ORIGIN_OFFLINE_SENTINEL, { force: true });
+}
 
 async function installApiFixtures(page) {
   await page.route(`${API}/**`, async route => {
@@ -85,16 +91,20 @@ async function installApiFixtures(page) {
 
 async function seedDurableState(page) {
   await page.addInitScript(({ save, identity }) => {
+    const marker = '__voidcut_f23_seeded';
+    if (sessionStorage.getItem(marker)) return;
     if (!localStorage.getItem('voidcut.standalone.v1')) {
       localStorage.setItem('voidcut.standalone.v1', JSON.stringify(save));
     }
     if (!localStorage.getItem('voidcut.leaderboard.identity.v1')) {
       localStorage.setItem('voidcut.leaderboard.identity.v1', JSON.stringify(identity));
     }
+    sessionStorage.setItem(marker, '1');
   }, { save: baseSave, identity: legacyIdentity });
 }
 
 async function openApp(page, { seed = true } = {}) {
+  await setOriginOffline(false);
   await installApiFixtures(page);
   if (seed) await seedDurableState(page);
   await page.goto('/index.html', { waitUntil: 'domcontentloaded' });
@@ -186,7 +196,11 @@ function capturePageErrors(page) {
 
 test.describe.configure({ mode: 'serial' });
 
-test('F23 offline boot preserves save and leaderboard identity after a controlled install', async ({ page, context }) => {
+test.afterEach(async () => {
+  await setOriginOffline(false);
+});
+
+test('F23 offline boot preserves save and leaderboard identity after a controlled install', async ({ page }) => {
   test.setTimeout(90_000);
   const errors = capturePageErrors(page);
   await openApp(page);
@@ -194,7 +208,7 @@ test('F23 offline boot preserves save and leaderboard identity after a controlle
   expectSeededState(await durableSnapshot(page));
   expect(await currentCacheHasIndex(page)).toBe(true);
 
-  await context.setOffline(true);
+  await setOriginOffline(true);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#menu')).toBeVisible();
   expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
@@ -202,7 +216,7 @@ test('F23 offline boot preserves save and leaderboard identity after a controlle
   expect(errors).toEqual([]);
 });
 
-test('F23 deleting the shell cache self-heals online and the rebuilt shell boots offline', async ({ page, context }) => {
+test('F23 deleting the shell cache self-heals online and the rebuilt shell boots offline', async ({ page }) => {
   test.setTimeout(90_000);
   const errors = capturePageErrors(page);
   await openApp(page);
@@ -219,14 +233,14 @@ test('F23 deleting the shell cache self-heals online and the rebuilt shell boots
   await expect.poll(() => currentCacheHasIndex(page), { timeout: 15_000 }).toBe(true);
   expectSeededState(await durableSnapshot(page));
 
-  await context.setOffline(true);
+  await setOriginOffline(true);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#menu')).toBeVisible();
   expectSeededState(await durableSnapshot(page));
   expect(errors).toEqual([]);
 });
 
-test('F23 a broken update install cannot evict the active worker, cache, or durable state', async ({ page, context }) => {
+test('F23 a broken update install cannot evict the active worker, cache, or durable state', async ({ page }) => {
   test.setTimeout(120_000);
   const errors = capturePageErrors(page);
   const original = await fs.readFile(SW_PATH, 'utf8');
@@ -266,13 +280,13 @@ test('F23 a broken update install cannot evict the active worker, cache, or dura
     expect(await voidcutCaches(page)).toEqual(beforeCaches);
     expectSeededState(await durableSnapshot(page));
 
-    await context.setOffline(true);
+    await setOriginOffline(true);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('#menu')).toBeVisible();
     expectSeededState(await durableSnapshot(page));
     expect(errors).toEqual([]);
   } finally {
-    await context.setOffline(false);
+    await setOriginOffline(false);
     await fs.writeFile(SW_PATH, original, 'utf8');
   }
 });
@@ -361,7 +375,7 @@ test('F23 cache generations overlap while waiting and obsolete shells are delete
   expect(errors).toEqual([]);
 });
 
-test('F23 unregister plus cache removal can reinstall cleanly without deleting application data', async ({ page, context }) => {
+test('F23 unregister plus cache removal can reinstall cleanly without deleting application data', async ({ page }) => {
   test.setTimeout(120_000);
   const errors = capturePageErrors(page);
   await openApp(page);
@@ -382,14 +396,14 @@ test('F23 unregister plus cache removal can reinstall cleanly without deleting a
   await expect.poll(() => currentCacheHasIndex(page), { timeout: 15_000 }).toBe(true);
   expectSeededState(await durableSnapshot(page));
 
-  await context.setOffline(true);
+  await setOriginOffline(true);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#menu')).toBeVisible();
   expectSeededState(await durableSnapshot(page));
   expect(errors).toEqual([]);
 });
 
-test('F23 deliberate localStorage loss boots a clean save offline and does not resurrect leaderboard ownership', async ({ page, context }) => {
+test('F23 deliberate localStorage loss boots a clean save offline and does not resurrect leaderboard ownership', async ({ page }) => {
   test.setTimeout(90_000);
   const errors = capturePageErrors(page);
   await openApp(page);
@@ -397,7 +411,7 @@ test('F23 deliberate localStorage loss boots a clean save offline and does not r
   expectSeededState(await durableSnapshot(page));
 
   await page.evaluate(() => localStorage.clear());
-  await context.setOffline(true);
+  await setOriginOffline(true);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#menu')).toBeVisible();
 
