@@ -1,0 +1,148 @@
+name: F20 expanded built-in diagnostics
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f20-expanded-diagnostics.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F20 diagnostics patch
+        run: python3 leaderboard/scripts/f20-expand-diagnostics.py
+
+      - name: Validate service worker syntax
+        run: node --check sw.js
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Run F9 persistent queue regression
+        working-directory: leaderboard
+        run: node scripts/test-persistent-submission-queue-source.mjs
+
+      - name: Run F10 identity durability regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-identity-durability-source.mjs
+
+      - name: Run F11 ranking consistency regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-ranking-source.mjs
+
+      - name: Run F12 backend maintenance regression
+        working-directory: leaderboard
+        run: python3 scripts/test-backend-maintenance-source.py
+
+      - name: Run F13 Worker error-boundary regression
+        working-directory: leaderboard
+        run: node scripts/test-worker-route-error-boundary-source.mjs
+
+      - name: Run F14 navigation shell cache regression
+        working-directory: leaderboard
+        run: node scripts/test-service-worker-navigation-cache-source.mjs
+
+      - name: Run F15 PWA update lifecycle regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-update-lifecycle-source.mjs
+
+      - name: Run F16 PWA cache freshness regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-cache-freshness-source.mjs
+
+      - name: Run F17 viewport significance regression
+        working-directory: leaderboard
+        run: node scripts/test-viewport-significance-source.mjs
+
+      - name: Run F18 tutorial reset regression
+        working-directory: leaderboard
+        run: node scripts/test-tutorial-reset-source.mjs
+
+      - name: Run F19 dead cleanup regression
+        working-directory: leaderboard
+        run: node scripts/test-dead-cosmetic-screen-cut-source.mjs
+
+      - name: Run F20 expanded diagnostics regression
+        working-directory: leaderboard
+        run: node scripts/test-expanded-diagnostics-source.mjs
+
+      - name: Mark F20 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old='| VC-024 | MEDIUM | Built-in diagnostics do not exercise live leaderboard API/replay retrieval, ranked timing integrity, or full SW update behavior. | F20 | FIXED — VERIFYING |'
+          new='| VC-024 | MEDIUM | Built-in diagnostics do not exercise live leaderboard API/replay retrieval, ranked timing integrity, or full SW update behavior. | F20 | FIXED — F20 PASS |'
+          if s.count(old)!=1:
+              raise SystemExit('F20 verification status marker missing')
+          s=s.replace(old,new,1)
+          s=s.replace('| F20 | Expand internal regression diagnostics | NOT STARTED |','| F20 | Expand internal regression diagnostics | PASS |',1)
+          s += '''\n### F20 verification evidence\n\n- The built-in `VERIFY INSTALL` path now runs the live leaderboard/replay, ranked-timing and PWA-update probes and includes each result in the user-visible diagnostic report.\n- Controlled leaderboard fixtures verify PASS for a valid leaderboard + replay, WARN for an empty board that cannot exercise replay retrieval, WARN for network unavailability, and FAIL for a live server HTTP error. The live probe contains no profile-create, run-ticket or submission endpoint.\n- The ranked timing diagnostic uses the real frame-gap, cumulative-drift, catch-up and timing-reset guards with notifications disabled only for the synthetic probe; normal runtime call sites retain the default notification behavior. All touched run/timing globals are restored in `finally`.\n- The service worker exposes only a read-only `DIAGNOSTIC_STATUS` response containing build/cache/scope. The browser probe performs `registration.update()`, checks waiting/update-ready coherence and build/cache identity, and contains no `SKIP_WAITING` activation action.\n- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F20 regressions are green.\n\n**F20 disposition: PASS. VC-024 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F20 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f index.html sw.js design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-expanded-diagnostics-source.mjs
+          git diff --cached --check
+          git commit -m 'F20: expand live release diagnostics'
+          git push origin HEAD:fix/v6.2-hardening
