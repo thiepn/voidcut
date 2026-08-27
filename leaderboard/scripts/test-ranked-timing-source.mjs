@@ -124,7 +124,7 @@ for (const required of [
   'trackRankedFrameGap(rawSec,delta)',
   'trackRankedCatchup(stepLimitHit)',
   "trackRankedTimingReset('LIFECYCLE TIMING RESET')",
-  "trackRankedTimingReset(significant?'DISPLAY CHANGED':'VIEWPORT TIMING RESET',!significant)",
+  "if(significant){trackRankedTimingReset('DISPLAY CHANGED')",
   'resetRankedTimingIntegrity();void prefetchLeaderboardTicket()',
   "invalidateRankedTiming('FRAME STALL')",
   "invalidateRankedTiming('TIMING DRIFT')",

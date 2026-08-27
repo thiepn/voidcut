@@ -68,7 +68,7 @@ Until final certification:
 | VC-017 | MEDIUM | `skipWaiting()` automatic activation conflicts with UI logic that expects a waiting service worker for manual update activation. | F15 | FIXED — F15 PASS |
 | VC-018 | MEDIUM | Cache freshness for core design assets relies on manually changing the SW cache revision; mixed old/new assets are possible after an incomplete release update. | F16 | FIXED — F16 PASS |
 | VC-019 | MEDIUM | Cache-write failures can interfere with otherwise successful network responses instead of degrading gracefully. | F16 | FIXED — F16 PASS |
-| VC-020 | MEDIUM | `visualViewport` resize/scroll handling cancels gestures and resets timing before determining whether the change is significant. | F17 | OPEN |
+| VC-020 | MEDIUM | `visualViewport` resize/scroll handling cancels gestures and resets timing before determining whether the change is significant. | F17 | FIXED — F17 PASS |
 | VC-021 | MEDIUM | Tutorial initialization partially mutates the current simulation instead of fully resetting generation/scoring/briefing state. | F18 | OPEN |
 | VC-022 | LOW | Cosmetic unlock logic contains unreachable/conflicting branches for IDs already returned as always unlocked. | F19 | OPEN |
 | VC-023 | LOW | Obsolete `.vc-screen-cut` hide rule remains even though the popup DOM/function/calls were removed. | F19 | OPEN |
@@ -525,3 +525,23 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Service-worker, Worker and inline runtime syntax pass, and permanent F1-F16 regressions are green.
 
 **F16 disposition: PASS. VC-018 and VC-019 closed.**
+
+## F17 implementation record — viewport significance before destructive reset
+
+- `settleViewport()` still debounces viewport resize/scroll events, fits the current visual viewport, updates `viewportState`, and uses the existing significance rule: forced change, orientation change, or at least 12% width/height delta.
+- Insignificant viewport changes now stop after geometry/state synchronization and `refreshFullscreen()`. They do not call `trackRankedTimingReset()`, do not cancel the active pointer gesture, do not zero `acc`/`visualBudget`, do not reset `last`, and do not pause play/replay.
+- Significant changes retain the existing safety behavior: ranked timing reset accounting, active-gesture cancellation, timing accumulator reset, play pause/unranking with `DISPLAY CHANGED`, and replay pause.
+- Orientation-change events remain forced significant changes. Regular window resize plus `visualViewport.resize` and `visualViewport.scroll` continue through the same debounced significance gate.
+- F3's permanent ranked-timing regression is updated only to reflect the intended F17 contract: viewport timing-reset accounting is now required inside the significant branch rather than for every viewport event.
+- No gameplay balance, scoring, replay format, save schema, leaderboard backend, PWA cache/update behavior, tutorial state, or visual design changed in F17.
+
+### F17 verification evidence
+
+- Insignificant viewport changes (<12% width/height delta, no orientation change, not forced) still update viewport geometry/state but do not call ranked timing-reset accounting, do not cancel the active pointer/aim, do not reset `acc`, `visualBudget`, or `last`, and do not pause play/replay.
+- Significant viewport changes retain the prior protective behavior: `DISPLAY CHANGED` timing accounting, pointer cancellation, accumulator/frame-timestamp reset, gameplay pause/unranking, or replay pause.
+- Forced orientation-change handling remains significant even when the measured dimension delta is tiny.
+- Permanent regression executes the extracted production `settleViewport()` function against insignificant, significant, forced, and replay fixtures.
+- F3's regression now asserts viewport timing-reset accounting in the significant branch, preserving ranked timing integrity without charging harmless visual-viewport jitter.
+- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F17 regressions are green.
+
+**F17 disposition: PASS. VC-020 closed.**
