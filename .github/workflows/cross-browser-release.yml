@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   source-regressions:
-    name: F1-F21 source/regression gate
+    name: F1-F22 source/regression gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -73,7 +73,7 @@ jobs:
         working-directory: leaderboard
         run: node scripts/test-replay-hash-normalization-source.mjs
 
-      - name: Run F6 anonymous rate-limit regression
+      - name: Run F6 anonymous/pre-auth rate-limit regression
         working-directory: leaderboard
         run: node scripts/test-anonymous-rate-limit-source.mjs
 
@@ -137,9 +137,42 @@ jobs:
         working-directory: leaderboard
         run: node scripts/test-cross-browser-release-suite-source.mjs
 
+      - name: Run F22 adversarial suite contract regression
+        working-directory: leaderboard
+        run: node scripts/test-adversarial-release-suite-source.mjs
+
+  adversarial-leaderboard:
+    name: F22 adversarial leaderboard / anti-cheat gate
+    needs: source-regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install verifier build dependencies
+        working-directory: leaderboard
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Run adversarial leaderboard corpus
+        working-directory: leaderboard
+        run: npm run test:adversarial
+
+      - name: Recheck ranked timing/resource/rate/ranking defenses
+        working-directory: leaderboard
+        run: |
+          node scripts/test-replay-timing-source.mjs ../index.html
+          node scripts/test-replay-resource-limits-source.mjs ../index.html
+          node scripts/test-anonymous-rate-limit-source.mjs
+          node scripts/test-ranked-start-ticket-source.mjs
+          node scripts/test-leaderboard-ranking-source.mjs
+          python3 scripts/test-backend-maintenance-source.py
+
   browser-matrix:
     name: Browser certification / ${{ matrix.browser }}
-    needs: source-regressions
+    needs: [source-regressions, adversarial-leaderboard]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -165,7 +198,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: f21-${{ matrix.browser }}-failure-evidence
+          name: f22-${{ matrix.browser }}-failure-evidence
           path: |
             playwright-report/
             test-results/
