@@ -1,0 +1,173 @@
+name: VOIDCUT cross-browser release suite
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/v6.2-hardening
+      - main
+    paths:
+      - 'index.html'
+      - 'sw.js'
+      - 'manifest.webmanifest'
+      - 'icon.svg'
+      - 'icon-192.png'
+      - 'icon-512.png'
+      - 'icon-maskable-512.png'
+      - 'design/**'
+      - 'leaderboard/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'playwright.config.mjs'
+      - '.github/workflows/cross-browser-release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-regressions:
+    name: F1-F21 source/regression gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate service worker syntax
+        run: node --check sw.js
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Run F9 persistent queue regression
+        working-directory: leaderboard
+        run: node scripts/test-persistent-submission-queue-source.mjs
+
+      - name: Run F10 identity durability regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-identity-durability-source.mjs
+
+      - name: Run F11 ranking consistency regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-ranking-source.mjs
+
+      - name: Run F12 backend maintenance regression
+        working-directory: leaderboard
+        run: python3 scripts/test-backend-maintenance-source.py
+
+      - name: Run F13 Worker error-boundary regression
+        working-directory: leaderboard
+        run: node scripts/test-worker-route-error-boundary-source.mjs
+
+      - name: Run F14 navigation shell cache regression
+        working-directory: leaderboard
+        run: node scripts/test-service-worker-navigation-cache-source.mjs
+
+      - name: Run F15 PWA update lifecycle regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-update-lifecycle-source.mjs
+
+      - name: Run F16 PWA cache freshness regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-cache-freshness-source.mjs
+
+      - name: Run F17 viewport significance regression
+        working-directory: leaderboard
+        run: node scripts/test-viewport-significance-source.mjs
+
+      - name: Run F18 tutorial reset regression
+        working-directory: leaderboard
+        run: node scripts/test-tutorial-reset-source.mjs
+
+      - name: Run F19 dead cleanup regression
+        working-directory: leaderboard
+        run: node scripts/test-dead-cosmetic-screen-cut-source.mjs
+
+      - name: Run F20 expanded diagnostics regression
+        working-directory: leaderboard
+        run: node scripts/test-expanded-diagnostics-source.mjs
+
+      - name: Run F21 suite contract regression
+        working-directory: leaderboard
+        run: node scripts/test-cross-browser-release-suite-source.mjs
+
+  browser-matrix:
+    name: Browser certification / ${{ matrix.browser }}
+    needs: source-regressions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pinned Playwright test package
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Install browser and OS dependencies
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run browser certification
+        run: npx playwright test --project=${{ matrix.browser }}
+
+      - name: Preserve Playwright failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: f21-${{ matrix.browser }}-failure-evidence
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
