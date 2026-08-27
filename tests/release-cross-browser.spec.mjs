@@ -182,7 +182,7 @@ test('save-17 persistence survives reload and keyboard/pointer input remains usa
   expect(errors).toEqual([]);
 });
 
-test('touch-style pointer input works on a mobile viewport without layout overflow', async ({ browser }) => {
+test('native touch input works on a mobile viewport without layout overflow', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
   const page = await context.newPage();
   const errors = capturePageErrors(page);
@@ -195,9 +195,8 @@ test('touch-style pointer input works on a mobile viewport without layout overfl
     expect(box).not.toBeNull();
     const clientX = box.x + box.width * 0.22;
     const clientY = box.y + box.height * 0.22;
-    await canvas.dispatchEvent('pointerdown', { pointerId: 41, pointerType: 'touch', isPrimary: true, buttons: 1, clientX, clientY });
-    await canvas.dispatchEvent('pointermove', { pointerId: 41, pointerType: 'touch', isPrimary: true, buttons: 1, clientX: clientX + 9, clientY: clientY + 7 });
-    await canvas.dispatchEvent('pointerup', { pointerId: 41, pointerType: 'touch', isPrimary: true, buttons: 0, clientX: clientX + 9, clientY: clientY + 7 });
+    await page.touchscreen.tap(clientX, clientY);
+    await page.touchscreen.tap(clientX + 12, clientY + 8);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     expect(overflow).toBeLessThanOrEqual(1);
     await expect(canvas).toBeVisible();
