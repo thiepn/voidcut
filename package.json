@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:pwa-destructive": "playwright test tests/pwa-destructive.spec.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1"
