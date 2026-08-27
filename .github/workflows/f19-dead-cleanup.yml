@@ -1,0 +1,148 @@
+name: F19 dead cosmetic and screen-cut cleanup
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f19-dead-cleanup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F19 cleanup patch
+        run: python3 leaderboard/scripts/f19-clean-dead-cosmetics-css.py
+
+      - name: Validate service worker syntax
+        run: node --check sw.js
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Run F9 persistent queue regression
+        working-directory: leaderboard
+        run: node scripts/test-persistent-submission-queue-source.mjs
+
+      - name: Run F10 identity durability regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-identity-durability-source.mjs
+
+      - name: Run F11 ranking consistency regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-ranking-source.mjs
+
+      - name: Run F12 backend maintenance regression
+        working-directory: leaderboard
+        run: python3 scripts/test-backend-maintenance-source.py
+
+      - name: Run F13 Worker error-boundary regression
+        working-directory: leaderboard
+        run: node scripts/test-worker-route-error-boundary-source.mjs
+
+      - name: Run F14 navigation shell cache regression
+        working-directory: leaderboard
+        run: node scripts/test-service-worker-navigation-cache-source.mjs
+
+      - name: Run F15 PWA update lifecycle regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-update-lifecycle-source.mjs
+
+      - name: Run F16 PWA cache freshness regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-cache-freshness-source.mjs
+
+      - name: Run F17 viewport significance regression
+        working-directory: leaderboard
+        run: node scripts/test-viewport-significance-source.mjs
+
+      - name: Run F18 tutorial reset regression
+        working-directory: leaderboard
+        run: node scripts/test-tutorial-reset-source.mjs
+
+      - name: Run F19 dead cleanup regression
+        working-directory: leaderboard
+        run: node scripts/test-dead-cosmetic-screen-cut-source.mjs
+
+      - name: Mark F19 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          replacements=[
+            ('| VC-022 | LOW | Cosmetic unlock logic contains unreachable/conflicting branches for IDs already returned as always unlocked. | F19 | FIXED — VERIFYING |',
+             '| VC-022 | LOW | Cosmetic unlock logic contains unreachable/conflicting branches for IDs already returned as always unlocked. | F19 | FIXED — F19 PASS |'),
+            ('| VC-023 | LOW | Obsolete `.vc-screen-cut` hide rule remains even though the popup DOM/function/calls were removed. | F19 | FIXED — VERIFYING |',
+             '| VC-023 | LOW | Obsolete `.vc-screen-cut` hide rule remains even though the popup DOM/function/calls were removed. | F19 | FIXED — F19 PASS |'),
+          ]
+          for old,new in replacements:
+              if s.count(old)!=1:
+                  raise SystemExit(f'F19 verification status marker missing: {old}')
+              s=s.replace(old,new,1)
+          s += '''\n### F19 verification evidence\n\n- The canonical always-unlocked cosmetic ID set is unchanged. The five duplicate conditional branches for `aurora`, `reactor`, `ribbon`, `laser`, and `vacuum` are absent.\n- An executable regression verifies all ten always-unlocked IDs remain available on a fresh save, all fifteen progression-based IDs remain locked on a fresh save, and each still unlocks at its existing threshold.\n- No `.vc-screen-cut` selector, screen-cut tone/pane/beam/run CSS, `vcCut*` keyframe, reduced-motion screen-cut selector, or later physical-sheet override remains in `index.html`.\n- The unrelated reduced-motion `.rank-up-fx` suppression remains intact.\n- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F19 regressions are green.\n\n**F19 disposition: PASS. VC-022 and VC-023 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F19 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f index.html design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-dead-cosmetic-screen-cut-source.mjs
+          git diff --cached --check
+          git commit -m 'F19: remove dead cosmetic and screen-cut code'
+          git push origin HEAD:fix/v6.2-hardening
