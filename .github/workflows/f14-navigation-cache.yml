@@ -1,0 +1,123 @@
+name: F14 navigation shell cache isolation
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f14-navigation-cache.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F14 navigation cache patch
+        run: python3 leaderboard/scripts/f14-fix-navigation-cache.py
+
+      - name: Validate service worker syntax
+        run: node --check sw.js
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs ../index.html
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Run F9 persistent queue regression
+        working-directory: leaderboard
+        run: node scripts/test-persistent-submission-queue-source.mjs
+
+      - name: Run F10 identity durability regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-identity-durability-source.mjs
+
+      - name: Run F11 ranking consistency regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-ranking-source.mjs
+
+      - name: Run F12 backend maintenance regression
+        working-directory: leaderboard
+        run: python3 scripts/test-backend-maintenance-source.py
+
+      - name: Run F13 Worker error-boundary regression
+        working-directory: leaderboard
+        run: node scripts/test-worker-route-error-boundary-source.mjs
+
+      - name: Run F14 navigation shell cache regression
+        working-directory: leaderboard
+        run: node scripts/test-service-worker-navigation-cache-source.mjs
+
+      - name: Mark F14 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old='| VC-016 | HIGH | Service worker can cache an arbitrary successful same-scope navigation response under the canonical `index.html` shell key. | F14 | FIXED — VERIFYING |'
+          new='| VC-016 | HIGH | Service worker can cache an arbitrary successful same-scope navigation response under the canonical `index.html` shell key. | F14 | FIXED — F14 PASS |'
+          if s.count(old)!=1:
+              raise SystemExit('F14 verification status marker missing')
+          s=s.replace(old,new,1)
+          s += '''\n### F14 verification evidence\n\n- Canonical scope-root and `index.html` HTML responses remain eligible to refresh the cached shell, including query-string navigation forms.\n- Same-scope arbitrary HTML such as a design preview is rejected by shell-cache eligibility even when it returns HTTP success.\n- Manifest/non-HTML responses, non-OK responses, missing final response URLs, cross-origin finals, and redirects to non-shell paths are all rejected.\n- The navigation branch contains exactly one `VOIDCUT_INDEX_URL` write site and it is guarded by `shouldCacheVoidcutShellResponse(url, response)`. The previous unconditional successful-navigation shell write is absent.\n- Navigation remains network-first with `cache: 'no-store'`, and failure still falls back to the canonical cached `index.html`.\n- F15 behavior remains intentionally unchanged: install-time `skipWaiting()` and explicit `SKIP_WAITING` message handling are still present.\n- F16 behavior remains intentionally unchanged: cache revision stays `6.1.0-pwa4` and core-asset caching is not redesigned in F14.\n- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F13 regressions remain green.\n\n**F14 disposition: PASS. VC-016 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F14 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f sw.js design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-service-worker-navigation-cache-source.mjs
+          git diff --cached --check
+          git commit -m 'F14: harden navigation shell caching'
+          git push origin HEAD:fix/v6.2-hardening
