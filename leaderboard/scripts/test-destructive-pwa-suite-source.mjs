@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
+// F23 final gate: transport-level origin outage and empty-queue storage-loss semantics.
 const root = path.resolve(process.cwd(), '..');
 const spec = fs.readFileSync(path.join(root, 'tests/pwa-destructive.spec.mjs'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'tests/pwa-test-server.mjs'), 'utf8');
