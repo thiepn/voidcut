@@ -82,6 +82,11 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('message', event => {
   const type = event.data && event.data.type;
+  if (type === 'DIAGNOSTIC_STATUS') {
+    const port = event.ports && event.ports[0];
+    if (port) port.postMessage({ type: 'VOIDCUT_SW_STATUS', build: VOIDCUT_BUILD, cache: VOIDCUT_CACHE, scope: VOIDCUT_SCOPE });
+    return;
+  }
   if (type === 'SKIP_WAITING') {
     self.skipWaiting();
   }

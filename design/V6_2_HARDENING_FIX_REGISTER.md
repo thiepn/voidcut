@@ -72,7 +72,7 @@ Until final certification:
 | VC-021 | MEDIUM | Tutorial initialization partially mutates the current simulation instead of fully resetting generation/scoring/briefing state. | F18 | FIXED — F18 PASS |
 | VC-022 | LOW | Cosmetic unlock logic contains unreachable/conflicting branches for IDs already returned as always unlocked. | F19 | FIXED — F19 PASS |
 | VC-023 | LOW | Obsolete `.vc-screen-cut` hide rule remains even though the popup DOM/function/calls were removed. | F19 | FIXED — F19 PASS |
-| VC-024 | MEDIUM | Built-in diagnostics do not exercise live leaderboard API/replay retrieval, ranked timing integrity, or full SW update behavior. | F20 | OPEN |
+| VC-024 | MEDIUM | Built-in diagnostics do not exercise live leaderboard API/replay retrieval, ranked timing integrity, or full SW update behavior. | F20 | FIXED — F20 PASS |
 | VC-025 | HIGH | Current v6.1/save17/replay9 code has not been run through the old full cross-browser/PWA certification suite. | F21 | OPEN |
 | VC-026 | MEDIUM | Existing release-certification documents describe v6.0/save16/replay8 and stale Daily/PWA behavior. | F27 | OPEN |
 | VC-027 | LOW | Leaderboard identity is outside the normal full-save export/import path; profile ownership is not portable/recoverable through the current backup flow. | F10/F24 | FIXED — F10 PASS; F24 AUDIT PENDING |
@@ -83,7 +83,7 @@ The following phases are gates rather than single defects and remain mandatory:
 
 | Phase | Gate | Status |
 |---|---|---|
-| F20 | Expand internal regression diagnostics | NOT STARTED |
+| F20 | Expand internal regression diagnostics | PASS |
 | F21 | Restore automated cross-browser release suite for current contracts | NOT STARTED |
 | F22 | Adversarial leaderboard / anti-cheat test suite | NOT STARTED |
 | F23 | Destructive PWA lifecycle testing | NOT STARTED |
@@ -583,3 +583,21 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Service-worker, Worker and inline runtime syntax pass, and permanent F1-F19 regressions are green.
 
 **F19 disposition: PASS. VC-022 and VC-023 closed.**
+
+## F20 implementation record — live competition, ranked timing and PWA diagnostics
+
+- `VERIFY INSTALL` now performs three explicit probes in addition to the existing local deterministic checks. Probe outcomes are surfaced as `PASS`, `WARN`, or `FAIL` in the report and feed the overall diagnostic result.
+- The live leaderboard probe is read-only: it requests `/leaderboard?limit=5`, validates the server ruleset and row contract, then retrieves one published replay when available and requires both local replay validation and deterministic competitive verification. It never creates a profile, requests/consumes a run ticket, or submits a score. Network unavailability is a warning so offline/local play remains a supported diagnostic state; malformed or erroneous live API responses are failures.
+- The ranked timing probe exercises the actual frame-stall, cumulative timing-drift, catch-up-limit and timing-reset guards against synthetic ranked state. The probe snapshots and restores every touched global and passes `notify=false` through timing guard helpers, so diagnostics cannot consume a real ticket, alter run eligibility, or display synthetic gameplay warnings. Normal runtime calls omit that optional parameter and retain `notify=true`.
+- The service-worker probe performs a real `registration.update()` check, waits briefly for an installing worker to settle, synchronizes the existing waiting-worker UI state, and queries the waiting/active worker over a read-only `DIAGNOSTIC_STATUS` MessageChannel. The worker reports its build, cache namespace and scope; diagnostics require page build, worker build, worker script query and build-derived cache namespace to agree. Diagnostics never send `SKIP_WAITING`, so F15 manual activation semantics remain intact.
+- The diagnostics UI copy now states that VERIFY INSTALL includes live services, timing guards and PWA update state. No gameplay balance, scoring, save schema, replay rules, leaderboard mutation contract, cosmetic behavior or PWA activation policy changed.
+
+### F20 verification evidence
+
+- The built-in `VERIFY INSTALL` path now runs the live leaderboard/replay, ranked-timing and PWA-update probes and includes each result in the user-visible diagnostic report.
+- Controlled leaderboard fixtures verify PASS for a valid leaderboard + replay, WARN for an empty board that cannot exercise replay retrieval, WARN for network unavailability, and FAIL for a live server HTTP error. The live probe contains no profile-create, run-ticket or submission endpoint.
+- The ranked timing diagnostic uses the real frame-gap, cumulative-drift, catch-up and timing-reset guards with notifications disabled only for the synthetic probe; normal runtime call sites retain the default notification behavior. All touched run/timing globals are restored in `finally`.
+- The service worker exposes only a read-only `DIAGNOSTIC_STATUS` response containing build/cache/scope. The browser probe performs `registration.update()`, checks waiting/update-ready coherence and build/cache identity, and contains no `SKIP_WAITING` activation action.
+- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F20 regressions are green.
+
+**F20 disposition: PASS. VC-024 closed.**

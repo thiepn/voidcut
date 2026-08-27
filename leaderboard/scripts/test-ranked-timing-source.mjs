@@ -126,9 +126,9 @@ for (const required of [
   "trackRankedTimingReset('LIFECYCLE TIMING RESET')",
   "if(significant){trackRankedTimingReset('DISPLAY CHANGED')",
   'resetRankedTimingIntegrity();void prefetchLeaderboardTicket()',
-  "invalidateRankedTiming('FRAME STALL')",
-  "invalidateRankedTiming('TIMING DRIFT')",
-  "invalidateRankedTiming('CATCH-UP LIMIT')",
+  "invalidateRankedTiming('FRAME STALL',notify)",
+  "invalidateRankedTiming('TIMING DRIFT',notify)",
+  "invalidateRankedTiming('CATCH-UP LIMIT',notify)",
 ]) assert.ok(source.includes(required), `missing F3 invariant: ${required}`);
 
 console.log('F3 ranked timing source regression PASS');
