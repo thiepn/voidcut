@@ -64,7 +64,7 @@ Until final certification:
 | VC-013 | MEDIUM | Expired/rejected/used run tickets have no retention cleanup and accumulate indefinitely. | F12 | FIXED — F12 PASS |
 | VC-014 | LOW | Concurrent personal-best updates can leave obsolete/orphaned R2 replay objects. | F12 | FIXED — F12 PASS |
 | VC-015 | MEDIUM | Top-level Worker route try/catch does not await async route handlers consistently, weakening controlled error handling. | F13 | FIXED — F13 PASS |
-| VC-016 | HIGH | Service worker can cache an arbitrary successful same-scope navigation response under the canonical `index.html` shell key. | F14 | OPEN |
+| VC-016 | HIGH | Service worker can cache an arbitrary successful same-scope navigation response under the canonical `index.html` shell key. | F14 | FIXED — F14 PASS |
 | VC-017 | MEDIUM | `skipWaiting()` automatic activation conflicts with UI logic that expects a waiting service worker for manual update activation. | F15 | OPEN |
 | VC-018 | MEDIUM | Cache freshness for core design assets relies on manually changing the SW cache revision; mixed old/new assets are possible after an incomplete release update. | F16 | OPEN |
 | VC-019 | MEDIUM | Cache-write failures can interfere with otherwise successful network responses instead of degrading gracefully. | F16 | OPEN |
@@ -446,3 +446,28 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Worker and inline runtime syntax pass, and permanent F1-F12 regressions remain green.
 
 **F13 disposition: PASS. VC-015 closed.**
+
+## F14 implementation record — navigation shell cache isolation
+
+- Successful same-origin navigations no longer automatically overwrite the canonical cached `index.html`.
+- Only navigation requests whose pathname is the service-worker scope root or canonical `index.html` may refresh the shell cache. Query strings do not change shell identity.
+- A candidate response must be successful, expose a final response URL that is still a canonical shell URL, and carry a `text/html` content type before it can be written under `VOIDCUT_INDEX_URL`.
+- Same-scope navigations to design previews, manifests, assets or arbitrary pages are returned normally from the network but cannot poison the app-shell cache.
+- Redirected shell requests whose final response resolves outside the root/index shell pair cannot replace the cached shell. Non-HTML and failed responses cannot replace it either.
+- Network-first navigation and the existing offline canonical-index fallback are preserved.
+- F15 update-lifecycle behavior is intentionally unchanged: install-time `skipWaiting()` and the `SKIP_WAITING` message path remain present.
+- F16 cache revision and core-asset freshness/write behavior are intentionally unchanged; the cache revision remains `6.1.0-pwa4`.
+- No client/game, backend, save, replay, ranking, ticket, scoring or UI behavior changed in F14.
+
+### F14 verification evidence
+
+- Canonical scope-root and `index.html` HTML responses remain eligible to refresh the cached shell, including query-string navigation forms.
+- Same-scope arbitrary HTML such as a design preview is rejected by shell-cache eligibility even when it returns HTTP success.
+- Manifest/non-HTML responses, non-OK responses, missing final response URLs, cross-origin finals, and redirects to non-shell paths are all rejected.
+- The navigation branch contains exactly one `VOIDCUT_INDEX_URL` write site and it is guarded by `shouldCacheVoidcutShellResponse(url, response)`. The previous unconditional successful-navigation shell write is absent.
+- Navigation remains network-first with `cache: 'no-store'`, and failure still falls back to the canonical cached `index.html`.
+- F15 behavior remains intentionally unchanged: install-time `skipWaiting()` and explicit `SKIP_WAITING` message handling are still present.
+- F16 behavior remains intentionally unchanged: cache revision stays `6.1.0-pwa4` and core-asset caching is not redesigned in F14.
+- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F13 regressions remain green.
+
+**F14 disposition: PASS. VC-016 closed.**
