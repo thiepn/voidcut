@@ -85,7 +85,7 @@ The following phases are gates rather than single defects and remain mandatory:
 |---|---|---|
 | F20 | Expand internal regression diagnostics | PASS |
 | F21 | Restore automated cross-browser release suite for current contracts | PASS |
-| F22 | Adversarial leaderboard / anti-cheat test suite | NOT STARTED |
+| F22 | Adversarial leaderboard / anti-cheat test suite | PASS |
 | F23 | Destructive PWA lifecycle testing | NOT STARTED |
 | F24 | Save migration, corruption and recovery audit | NOT STARTED |
 | F25 | Manual desktop/mobile UX regression pass | NOT STARTED |
@@ -615,3 +615,19 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Final certification workflow `33074270574` passed its F1-F21 source gate and all three browser jobs: Chromium PASS, Firefox PASS and WebKit PASS.
 
 **F21 disposition: PASS. VC-025 closed.**
+
+## F22 implementation record — adversarial leaderboard / anti-cheat release gate
+
+- Added a permanent generated-verifier adversarial corpus that executes the current browser simulation extracted by `build-verifier.mjs`, rather than relying only on source-string assertions. The suite constructs a known-good replay from the exact current `Sim` implementation and first proves the server verifier accepts that control fixture.
+- The corpus then recomputes the client replay hash after adversarial mutations and proves deterministic verification still rejects forged score inflation, forged chamber depth, forged death time, off-arena input, duplicate/epsilon-colliding v9 timestamps, post-death input, invalid seeds/results, wrong arena/director generations, and legacy replay-v8 global submissions. This demonstrates that recomputing the client-side FNV replay hash cannot manufacture a valid leaderboard result.
+- Competitive resource attacks cover the 12,000-event and 1,800-second ceilings in addition to the existing 2.5 MB bounded request reader and deterministic step budget. The broad local replay envelope remains unchanged for supported local/legacy viewing.
+- The suite verifies ranked runs remain bound to a server-issued random seed and current ruleset, same-ticket submissions are serialized by the ticket-keyed Durable Object, rejected tickets are atomically consumed, verified tickets are single-use/idempotent, canonical PB ordering remains enforced by the conditional D1 update, unverified replay data cannot reach R2, and public replay retrieval requires a live leaderboard reference. F12 replay-GC protections remain intact.
+- F22 found and fixed a pre-auth submission-throttling bypass: the outer `/run/submit/:ticket` limiter had been keyed by the caller-supplied bearer-token hash, allowing an attacker to rotate fake bearer strings into fresh limiter buckets before authentication. Submission pre-auth throttling now uses only trusted `CF-Connecting-IP` via `preauthKey(request)`; missing trusted IP fails closed to the shared `ip:unknown` bucket. Bearer authentication is still enforced inside the serialized verifier. Existing limiter quotas remain unchanged.
+- F22 found and fixed a verified-ticket ownership ordering gap: the idempotent `status === verified` response was reachable before the ticket-owner check. Ownership is now checked immediately after ticket lookup and before any verified idempotent response, so another valid profile cannot query another player's verified ticket result.
+- `/run/start` now rejects an explicitly supplied invalid bearer identity with `401 invalid-profile` instead of silently falling back to anonymous ticket issuance. Anonymous starts without a bearer token remain supported.
+- The F6 rate-limit regression was updated to the stronger F22 pre-auth contract and explicitly proves User-Agent, `X-Forwarded-For`, `X-Real-IP`, and rotating bearer strings cannot split the trusted-IP submission bucket.
+- The permanent release workflow now has a dedicated `F22 adversarial leaderboard / anti-cheat gate`. Browser certification depends on both the F1-F22 source/regression gate and this adversarial gate, so Chromium, Firefox and WebKit cannot run unless anti-cheat verification succeeds first.
+- Final persistent workflow `33078988894` passed the complete F1-F22 source/regression gate, the dedicated F22 adversarial gate, and the Chromium, Firefox and WebKit browser certification jobs.
+- No gameplay balance, scoring formula, save schema, replay format/version, arena/director generation, cosmetic system, or PWA activation behavior changed in F22.
+
+**F22 disposition: PASS. Adversarial leaderboard gate restored; fake-token rate-limit rotation and cross-profile verified-ticket idempotency gaps closed.**
