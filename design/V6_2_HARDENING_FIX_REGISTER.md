@@ -65,7 +65,7 @@ Until final certification:
 | VC-014 | LOW | Concurrent personal-best updates can leave obsolete/orphaned R2 replay objects. | F12 | FIXED — F12 PASS |
 | VC-015 | MEDIUM | Top-level Worker route try/catch does not await async route handlers consistently, weakening controlled error handling. | F13 | FIXED — F13 PASS |
 | VC-016 | HIGH | Service worker can cache an arbitrary successful same-scope navigation response under the canonical `index.html` shell key. | F14 | FIXED — F14 PASS |
-| VC-017 | MEDIUM | `skipWaiting()` automatic activation conflicts with UI logic that expects a waiting service worker for manual update activation. | F15 | OPEN |
+| VC-017 | MEDIUM | `skipWaiting()` automatic activation conflicts with UI logic that expects a waiting service worker for manual update activation. | F15 | FIXED — F15 PASS |
 | VC-018 | MEDIUM | Cache freshness for core design assets relies on manually changing the SW cache revision; mixed old/new assets are possible after an incomplete release update. | F16 | OPEN |
 | VC-019 | MEDIUM | Cache-write failures can interfere with otherwise successful network responses instead of degrading gracefully. | F16 | OPEN |
 | VC-020 | MEDIUM | `visualViewport` resize/scroll handling cancels gestures and resets timing before determining whether the change is significant. | F17 | OPEN |
@@ -471,3 +471,30 @@ F8 changes only standard-run ticket acquisition/start synchronization and explic
 - Service-worker, Worker and inline runtime syntax pass, and permanent F1-F13 regressions remain green.
 
 **F14 disposition: PASS. VC-016 closed.**
+
+## F15 implementation record — explicit PWA update activation
+
+- Updated service workers no longer call `skipWaiting()` during `install`; when an older worker controls an open page, the new worker can now reach the browser's normal `waiting` state.
+- The explicit `SKIP_WAITING` message handler remains the sole early-activation path, so activation is initiated by the app's update action rather than automatically by installation.
+- Client `updateReady` state is now synchronized from the actual `ServiceWorkerRegistration.waiting` property. An `installed` event alone no longer marks an update ready.
+- Existing `registration.waiting` workers are detected immediately, and workers already installing when registration is observed are tracked in addition to future `updatefound` events.
+- Installed/redundant worker state changes schedule a registration re-inspection so the UI reflects the registration's final waiting state rather than racing the lifecycle transition.
+- The update button captures the actual waiting worker, persists the save first, and sends `SKIP_WAITING` only after persistence succeeds. Missing/stale waiting workers fail closed without entering an applying state.
+- `controllerchange` reload remains gated by `updateApplying`, preventing first-install or unrelated controller changes from forcing a page reload.
+- F14 navigation cache isolation is unchanged. F16 cache revision/freshness/write behavior is unchanged and the cache revision remains `6.1.0-pwa4`.
+- No gameplay, balance, leaderboard, replay, save-schema, scoring or visual-design behavior changed in F15.
+
+### F15 verification evidence
+
+- The service-worker install handler completes core precaching without calling `skipWaiting()`, so an update can remain waiting while an older worker controls open clients.
+- `SKIP_WAITING` message handling remains present and is the explicit early-activation route.
+- Client update readiness is true only when `registration.waiting` is populated; an installing worker reaching `installed` does not independently fabricate readiness.
+- Pre-existing waiting workers, workers already installing at registration observation, and future `updatefound` workers are all covered.
+- Installed/redundant transitions trigger deferred registration re-inspection, avoiding the statechange-versus-waiting-property race.
+- The update action fails closed if no waiting worker exists, prevents duplicate apply actions, persists the save before activation, and posts `SKIP_WAITING` to the captured waiting worker only after persistence succeeds.
+- A `postMessage` failure restores non-applying UI state and re-synchronizes waiting status.
+- `controllerchange` reload is still conditional on the explicit update-applying state.
+- F14 shell-cache isolation remains green after removing its obsolete F15 boundary assertion. Cache revision remains `6.1.0-pwa4`; F16 is untouched.
+- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F15 regressions are green.
+
+**F15 disposition: PASS. VC-017 closed.**

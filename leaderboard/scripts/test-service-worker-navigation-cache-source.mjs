@@ -5,7 +5,6 @@ const root = new URL('../../', import.meta.url);
 const sw = fs.readFileSync(new URL('sw.js', root), 'utf8');
 
 assert.ok(sw.includes("const VOIDCUT_CACHE_VERSION = '6.1.0-pwa4';"), 'F14 must not change the F16 cache revision contract');
-assert.ok(sw.includes('await self.skipWaiting();'), 'F14 must not change install-time skipWaiting; F15 owns update lifecycle');
 assert.match(sw, /if \(type === 'SKIP_WAITING'\) \{\s*self\.skipWaiting\(\);\s*\}/, 'F14 must preserve explicit SKIP_WAITING message handling');
 assert.ok(sw.includes("const response = await fetch(request, { cache: 'no-store' });"), 'navigation must remain network-first/no-store');
 assert.ok(sw.includes("const fallback = await cache.match(VOIDCUT_INDEX_URL, { ignoreSearch: true });"), 'offline navigation must retain canonical index fallback');

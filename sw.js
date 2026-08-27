@@ -41,7 +41,6 @@ self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(VOIDCUT_CACHE);
     await cache.addAll(VOIDCUT_CORE_URLS);
-    await self.skipWaiting();
   })());
 });
 
