@@ -4,6 +4,7 @@ root = Path(__file__).resolve().parents[2]
 index_path = root / 'index.html'
 sw_path = root / 'sw.js'
 register_path = root / 'design' / 'V6_2_HARDENING_FIX_REGISTER.md'
+f3_test_path = root / 'leaderboard' / 'scripts' / 'test-ranked-timing-source.mjs'
 
 
 def replace_once(text, old, new, label):
@@ -64,6 +65,18 @@ old_message = """self.addEventListener('message', event => {\n  const type = eve
 new_message = """self.addEventListener('message', event => {\n  const type = event.data && event.data.type;\n  if (type === 'DIAGNOSTIC_STATUS') {\n    const port = event.ports && event.ports[0];\n    if (port) port.postMessage({ type: 'VOIDCUT_SW_STATUS', build: VOIDCUT_BUILD, cache: VOIDCUT_CACHE, scope: VOIDCUT_SCOPE });\n    return;\n  }\n  if (type === 'SKIP_WAITING') {\n    self.skipWaiting();\n  }\n});"""
 sw = replace_once(sw, old_message, new_message, 'service-worker diagnostic status channel')
 sw_path.write_text(sw, encoding='utf-8')
+
+# F3's executable behavior checks already prove notify defaults remain true.
+# Update only its source-string invariants to follow the new explicit notify
+# forwarding used by F20 diagnostics.
+f3 = f3_test_path.read_text(encoding='utf-8')
+for old, new, label in [
+    ("  \"invalidateRankedTiming('FRAME STALL')\",", "  \"invalidateRankedTiming('FRAME STALL',notify)\",", 'F3 frame-stall source invariant'),
+    ("  \"invalidateRankedTiming('TIMING DRIFT')\",", "  \"invalidateRankedTiming('TIMING DRIFT',notify)\",", 'F3 timing-drift source invariant'),
+    ("  \"invalidateRankedTiming('CATCH-UP LIMIT')\",", "  \"invalidateRankedTiming('CATCH-UP LIMIT',notify)\",", 'F3 catch-up source invariant'),
+]:
+    f3 = replace_once(f3, old, new, label)
+f3_test_path.write_text(f3, encoding='utf-8')
 
 reg = register_path.read_text(encoding='utf-8')
 row = '| VC-024 | MEDIUM | Built-in diagnostics do not exercise live leaderboard API/replay retrieval, ranked timing integrity, or full SW update behavior. | F20 | OPEN |'
