@@ -61,6 +61,19 @@ physical_cut = '''/* Screen-cut transition becomes two physical sheets separatin
 '''
 html = replace_once(html, physical_cut, '', 'dead physical screen-cut CSS block')
 
+html = replace_once(
+    html,
+    '.vc-screen-cut,.vc-screen-cut[data-tone="cyan"],.vc-screen-cut[data-tone="magenta"]{--cut-a:var(--vc-accent)!important;--cut-b:var(--vc-accent-alt)!important}\n',
+    '',
+    'dead global screen-cut palette override',
+)
+html = replace_once(
+    html,
+    '/* Result regression fix: the old global screen-cut overlay was visually intrusive. */\n.vc-screen-cut{display:none!important}\n',
+    '',
+    'obsolete screen-cut hide rule',
+)
+
 if '.vc-screen-cut' in html:
     raise SystemExit('unexpected .vc-screen-cut reference remains after cleanup')
 for token in ['vcCutShell', 'vcCutBeam', 'vcCutPaneA', 'vcCutPaneB']:
@@ -74,5 +87,5 @@ row22 = '| VC-022 | LOW | Cosmetic unlock logic contains unreachable/conflicting
 row23 = '| VC-023 | LOW | Obsolete `.vc-screen-cut` hide rule remains even though the popup DOM/function/calls were removed. | F19 | OPEN |'
 reg = replace_once(reg, row22, row22.replace('OPEN', 'FIXED — VERIFYING'), 'VC-022 register row')
 reg = replace_once(reg, row23, row23.replace('OPEN', 'FIXED — VERIFYING'), 'VC-023 register row')
-reg += '''\n## F19 implementation record — dead cosmetic branches and screen-cut CSS cleanup\n\n- `cosmeticUnlocked()` keeps its existing unconditional IDs exactly as-is. The unreachable later conditions for `aurora`, `reactor`, `ribbon`, `laser`, and `vacuum` were removed because those IDs already return `true` before any threshold branch can execute. No cosmetic unlock outcome changes.\n- All live conditional unlock branches remain intact (`ember`, `amethyst`, `monochrome`, `hollow`, `prism`, `eclipse`, `comet`, `echo`, `sparks`, `blade`, `arc`, `rift`, `shatter`, `dissolve`, `fracture`).\n- The complete dead `.vc-screen-cut` CSS family was removed, including tone/pane/beam/run rules, `vcCutShell`/`vcCutBeam`/`vcCutPaneA`/`vcCutPaneB` keyframes, the reduced-motion screen-cut selector, and the later physical-sheet overrides.\n- The unrelated reduced-motion `.rank-up-fx` hide rule remains.\n- No screen-cut DOM/runtime path is reintroduced. No save schema, gameplay, scoring, replay, leaderboard, PWA, tutorial, cosmetic IDs/descriptions/defaults, or actual unlock requirements changed.\n'''
+reg += '''\n## F19 implementation record — dead cosmetic branches and screen-cut CSS cleanup\n\n- `cosmeticUnlocked()` keeps its existing unconditional IDs exactly as-is. The unreachable later conditions for `aurora`, `reactor`, `ribbon`, `laser`, and `vacuum` were removed because those IDs already return `true` before any threshold branch can execute. No cosmetic unlock outcome changes.\n- All live conditional unlock branches remain intact (`ember`, `amethyst`, `monochrome`, `hollow`, `prism`, `eclipse`, `comet`, `echo`, `sparks`, `blade`, `arc`, `rift`, `shatter`, `dissolve`, `fracture`).\n- The complete dead `.vc-screen-cut` CSS family was removed, including tone/pane/beam/run rules, `vcCutShell`/`vcCutBeam`/`vcCutPaneA`/`vcCutPaneB` keyframes, the reduced-motion screen-cut selector, physical-sheet overrides, the later global palette override, and the obsolete final hide rule.\n- The unrelated reduced-motion `.rank-up-fx` hide rule remains.\n- No screen-cut DOM/runtime path is reintroduced. No save schema, gameplay, scoring, replay, leaderboard, PWA, tutorial, cosmetic IDs/descriptions/defaults, or actual unlock requirements changed.\n'''
 register_path.write_text(reg, encoding='utf-8')
