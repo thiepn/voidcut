@@ -1,0 +1,127 @@
+name: F15 PWA manual update lifecycle
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f15-pwa-update-lifecycle.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F15 PWA lifecycle patch
+        run: python3 leaderboard/scripts/f15-fix-pwa-update-lifecycle.py
+
+      - name: Validate service worker syntax
+        run: node --check sw.js
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs ../index.html
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Run F9 persistent queue regression
+        working-directory: leaderboard
+        run: node scripts/test-persistent-submission-queue-source.mjs
+
+      - name: Run F10 identity durability regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-identity-durability-source.mjs
+
+      - name: Run F11 ranking consistency regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-ranking-source.mjs
+
+      - name: Run F12 backend maintenance regression
+        working-directory: leaderboard
+        run: python3 scripts/test-backend-maintenance-source.py
+
+      - name: Run F13 Worker error-boundary regression
+        working-directory: leaderboard
+        run: node scripts/test-worker-route-error-boundary-source.mjs
+
+      - name: Run F14 navigation shell cache regression
+        working-directory: leaderboard
+        run: node scripts/test-service-worker-navigation-cache-source.mjs
+
+      - name: Run F15 PWA update lifecycle regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-update-lifecycle-source.mjs
+
+      - name: Mark F15 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          old='| VC-017 | MEDIUM | `skipWaiting()` automatic activation conflicts with UI logic that expects a waiting service worker for manual update activation. | F15 | FIXED — VERIFYING |'
+          new='| VC-017 | MEDIUM | `skipWaiting()` automatic activation conflicts with UI logic that expects a waiting service worker for manual update activation. | F15 | FIXED — F15 PASS |'
+          if s.count(old)!=1:
+              raise SystemExit('F15 verification status marker missing')
+          s=s.replace(old,new,1)
+          s += '''\n### F15 verification evidence\n\n- The service-worker install handler completes core precaching without calling `skipWaiting()`, so an update can remain waiting while an older worker controls open clients.\n- `SKIP_WAITING` message handling remains present and is the explicit early-activation route.\n- Client update readiness is true only when `registration.waiting` is populated; an installing worker reaching `installed` does not independently fabricate readiness.\n- Pre-existing waiting workers, workers already installing at registration observation, and future `updatefound` workers are all covered.\n- Installed/redundant transitions trigger deferred registration re-inspection, avoiding the statechange-versus-waiting-property race.\n- The update action fails closed if no waiting worker exists, prevents duplicate apply actions, persists the save before activation, and posts `SKIP_WAITING` to the captured waiting worker only after persistence succeeds.\n- A `postMessage` failure restores non-applying UI state and re-synchronizes waiting status.\n- `controllerchange` reload is still conditional on the explicit update-applying state.\n- F14 shell-cache isolation remains green after removing its obsolete F15 boundary assertion. Cache revision remains `6.1.0-pwa4`; F16 is untouched.\n- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F15 regressions are green.\n\n**F15 disposition: PASS. VC-017 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F15 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f sw.js index.html design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-service-worker-navigation-cache-source.mjs leaderboard/scripts/test-pwa-update-lifecycle-source.mjs
+          git diff --cached --check
+          git commit -m 'F15: repair manual PWA update lifecycle'
+          git push origin HEAD:fix/v6.2-hardening
