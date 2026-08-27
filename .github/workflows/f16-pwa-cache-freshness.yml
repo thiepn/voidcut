@@ -1,0 +1,138 @@
+name: F16 PWA cache freshness and failure isolation
+
+on:
+  push:
+    branches: [fix/v6.2-hardening]
+    paths:
+      - '.github/workflows/f16-pwa-cache-freshness.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v6.2-hardening
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply F16 PWA cache patch
+        run: |
+          python3 leaderboard/scripts/f16-fix-pwa-cache-freshness.py
+          python3 leaderboard/scripts/f16-update-f14-cache-test.py
+
+      - name: Validate service worker syntax
+        run: node --check sw.js
+
+      - name: Validate Worker syntax
+        working-directory: leaderboard
+        run: npm run check
+
+      - name: Validate inline runtime syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
+          if(!scripts.length)throw new Error('inline runtime script missing');
+          for(const source of scripts)new Function(source);
+          console.log('inline runtime syntax PASS');
+          NODE
+
+      - name: Run F1 replay timing regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-timing-source.mjs ../index.html
+
+      - name: Run F2 ranked pause regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-pause-source.mjs ../index.html
+
+      - name: Run F3 ranked timing regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-timing-source.mjs
+
+      - name: Run F4 replay resource regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-resource-limits-source.mjs ../index.html
+
+      - name: Run F5 replay hash regression
+        working-directory: leaderboard
+        run: node scripts/test-replay-hash-normalization-source.mjs
+
+      - name: Run F6 anonymous rate-limit regression
+        working-directory: leaderboard
+        run: node scripts/test-anonymous-rate-limit-source.mjs
+
+      - name: Run F7 Turnstile contract regression
+        working-directory: leaderboard
+        run: node scripts/test-turnstile-contract-source.mjs
+
+      - name: Run F8 ranked start regression
+        working-directory: leaderboard
+        run: node scripts/test-ranked-start-ticket-source.mjs
+
+      - name: Run F9 persistent queue regression
+        working-directory: leaderboard
+        run: node scripts/test-persistent-submission-queue-source.mjs
+
+      - name: Run F10 identity durability regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-identity-durability-source.mjs
+
+      - name: Run F11 ranking consistency regression
+        working-directory: leaderboard
+        run: node scripts/test-leaderboard-ranking-source.mjs
+
+      - name: Run F12 backend maintenance regression
+        working-directory: leaderboard
+        run: python3 scripts/test-backend-maintenance-source.py
+
+      - name: Run F13 Worker error-boundary regression
+        working-directory: leaderboard
+        run: node scripts/test-worker-route-error-boundary-source.mjs
+
+      - name: Run F14 navigation shell cache regression
+        working-directory: leaderboard
+        run: node scripts/test-service-worker-navigation-cache-source.mjs
+
+      - name: Run F15 PWA update lifecycle regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-update-lifecycle-source.mjs
+
+      - name: Run F16 PWA cache freshness regression
+        working-directory: leaderboard
+        run: node scripts/test-pwa-cache-freshness-source.mjs
+
+      - name: Mark F16 verified
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('design/V6_2_HARDENING_FIX_REGISTER.md')
+          s=p.read_text(encoding='utf-8')
+          rows=[
+            ('| VC-018 | MEDIUM | Cache freshness for core design assets relies on manually changing the SW cache revision; mixed old/new assets are possible after an incomplete release update. | F16 | FIXED — VERIFYING |',
+             '| VC-018 | MEDIUM | Cache freshness for core design assets relies on manually changing the SW cache revision; mixed old/new assets are possible after an incomplete release update. | F16 | FIXED — F16 PASS |'),
+            ('| VC-019 | MEDIUM | Cache-write failures can interfere with otherwise successful network responses instead of degrading gracefully. | F16 | FIXED — VERIFYING |',
+             '| VC-019 | MEDIUM | Cache-write failures can interfere with otherwise successful network responses instead of degrading gracefully. | F16 | FIXED — F16 PASS |'),
+          ]
+          for old,new in rows:
+              if s.count(old)!=1:
+                  raise SystemExit(f'F16 verification status marker missing: {old[:20]}')
+              s=s.replace(old,new,1)
+          s += '''\n### F16 verification evidence\n\n- The worker no longer contains an independent `VOIDCUT_CACHE_VERSION`; Cache Storage generation is derived from the validated `build` query carried by the service-worker script URL.\n- Client registration constructs that URL from the canonical runtime `BUILD_ID` and uses `updateViaCache: 'none'`, so release identity and PWA generation cannot drift through a forgotten second revision.\n- Install uses build-specific cache names and `Request(..., {cache:'reload'})` for the complete core set. F15 still permits the new worker to wait without modifying the active worker's previous-generation cache.\n- Core non-navigation requests are network-first with `cache:'no-cache'`, successful responses are persisted best-effort, and network failure falls back to the current build cache.\n- Navigation remains network-first/no-store with F14 canonical-shell eligibility and offline index fallback.\n- `caches.open()` and `cache.put()` failures are explicitly caught. Regression fixtures force both failures and confirm they degrade to null/false rather than escaping.\n- Navigation/core source-order assertions confirm successful network responses are obtained before runtime cache access/write can fail, and no direct fallible `cache.put()` remains in those response paths.\n- Install-time cache population remains strict so a brand-new worker cannot report successful installation with an incomplete offline core bundle.\n- Service-worker, Worker and inline runtime syntax pass, and permanent F1-F16 regressions are green.\n\n**F16 disposition: PASS. VC-018 and VC-019 closed.**\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Commit F16 implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f sw.js index.html design/V6_2_HARDENING_FIX_REGISTER.md leaderboard/scripts/test-service-worker-navigation-cache-source.mjs leaderboard/scripts/test-pwa-update-lifecycle-source.mjs leaderboard/scripts/test-pwa-cache-freshness-source.mjs
+          git diff --cached --check
+          git commit -m 'F16: harden PWA cache freshness and writes'
+          git push origin HEAD:fix/v6.2-hardening
