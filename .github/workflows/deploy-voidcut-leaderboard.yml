@@ -20,13 +20,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: gate
-        name: Check v6.1 frontend contract
+        name: Check v6.1.1 frontend contract
         run: |
-          if grep -q 'voidcut-build" content="6.1.0' index.html && grep -q 'voidcut-replay-version" content="9' index.html; then
+          if grep -q 'voidcut-build" content="6.1.1' index.html && grep -q 'voidcut-replay-version" content="9' index.html; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Leaderboard deploy skipped until the v6.1 frontend patch lands." >> "$GITHUB_STEP_SUMMARY"
+            echo "Leaderboard deploy skipped until the v6.1.1 frontend patch lands." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - uses: actions/setup-node@v4

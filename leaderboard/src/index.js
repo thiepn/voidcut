@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { verifyReplay } from './generated-verifier.js';
 
-const RULESET = Object.freeze({ build: '6.1.0', replay: 9, arena: 2, director: 6 });
+const RULESET = Object.freeze({ build: '6.1.1', replay: 9, arena: 2, director: 6 });
 const TICKET_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_REPLAY_BYTES = 12_500_000;
 const NAME_RE = /^[A-Za-z0-9 _-]{3,16}$/;
@@ -211,7 +211,7 @@ async function leaderboard(request, env) {
 }
 
 async function replayResponse(request, env, hash) {
-  if (!/^[A-F0-9]{64}$/.test(hash)) return error(request, 400, 'invalid-replay', 'Invalid replay id.');
+  if (!/^[a-f0-9]{64}$/i.test(hash)) return error(request, 400, 'invalid-replay', 'Invalid replay id.');
   const owner = await env.DB.prepare('SELECT id FROM players WHERE best_replay_hash=? LIMIT 1').bind(hash).first();
   if (!owner) return error(request, 404, 'not-found', 'Replay is not on the leaderboard.');
   const obj = await env.REPLAYS.get(`verified/${hash}.json`);
