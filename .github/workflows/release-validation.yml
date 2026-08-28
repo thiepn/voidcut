@@ -1,0 +1,65 @@
+name: VOIDCUT Release Validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Static release contract validation
+        run: python3 scripts/release-validation.py
+
+      - name: Validate frontend and service worker syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>',html,re.I)
+          if not scripts:
+              raise SystemExit('No inline VOIDCUT runtime script found')
+          Path('/tmp/voidcut-runtime.js').write_text(max(scripts,key=len),encoding='utf-8')
+          PY
+          node --check /tmp/voidcut-runtime.js
+          node --check sw.js
+          node --check design/voidcut-design-system.js
+
+      - name: Build and validate leaderboard verifier
+        working-directory: leaderboard
+        run: |
+          npm install --no-audit --no-fund
+          npm run build:verifier
+          node --check src/generated-verifier.js
+          node --check src/index.js
+          npx wrangler deploy --dry-run --outdir /tmp/voidcut-worker-build
+
+      - name: Install Playwright engines
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium firefox webkit
+
+      - name: Cross-engine browser smoke
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/voidcut-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:4173/ >/dev/null && break
+            sleep .25
+          done
+          node scripts/browser-smoke.mjs
