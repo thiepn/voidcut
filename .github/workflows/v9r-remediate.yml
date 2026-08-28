@@ -5,6 +5,7 @@ on:
     branches: [chatgpt/v9r-release-remediation]
     paths:
       - 'scripts/v9r-remediate.py'
+      - 'scripts/v9r-fix-remediator.py'
       - '.github/workflows/v9r-remediate.yml'
   workflow_dispatch:
 
@@ -23,6 +24,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Repair one-shot remediation matcher
+        run: python3 scripts/v9r-fix-remediator.py
 
       - name: Apply V9-R remediation
         run: python3 scripts/v9r-remediate.py
@@ -56,7 +60,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm -f scripts/v9r-remediate.py .github/workflows/v9r-remediate.yml
+          git rm -f scripts/v9r-remediate.py scripts/v9r-fix-remediator.py .github/workflows/v9r-remediate.yml
           git add index.html sw.js leaderboard/src/index.js leaderboard/src/generated-verifier.js .github/workflows/deploy-voidcut-leaderboard.yml scripts/release-validation.py scripts/browser-smoke.mjs .github/workflows/release-validation.yml
           git commit -m "V9-R close release-candidate blockers"
           git push origin HEAD:chatgpt/v9r-release-remediation
