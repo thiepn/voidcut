@@ -2,6 +2,16 @@ from pathlib import Path
 
 p = Path(__file__).with_name('v9r-remediate.py')
 s = p.read_text(encoding='utf-8')
+
+# Python re.sub interprets backslashes in a replacement string. The remediation
+# replacements intentionally contain JavaScript regexes such as /\s+/g, so make
+# replacement insertion literal.
+s = s.replace(
+    "new, count = re.subn(pattern, replacement, text, count=1, flags=flags)",
+    "new, count = re.subn(pattern, lambda _m: replacement, text, count=1, flags=flags)",
+)
+
+# Replace the tutorial function by boundaries instead of matching its full copy.
 start = s.index('# Tutorial: teach the game, not the complete scoring formula.')
 end = s.index('# Reduced Motion: manual preference OR operating-system preference controls canvas decoration.')
 block = r'''# Tutorial: teach the game, not the complete scoring formula.
@@ -14,4 +24,4 @@ s=s[:tutorial_start]+new_tutorial+s[tutorial_end:]
 
 '''
 p.write_text(s[:start] + block + s[end:], encoding='utf-8')
-print('Updated tutorial remediation matcher.')
+print('Updated remediation matchers.')
