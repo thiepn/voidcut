@@ -1,0 +1,62 @@
+name: V9-R Release Remediation
+
+on:
+  push:
+    branches: [chatgpt/v9r-release-remediation]
+    paths:
+      - 'scripts/v9r-remediate.py'
+      - '.github/workflows/v9r-remediate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/v9r-release-remediation
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply V9-R remediation
+        run: python3 scripts/v9r-remediate.py
+
+      - name: Validate release contracts
+        run: |
+          python3 scripts/release-validation.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>',html,re.I)
+          if not scripts:
+              raise SystemExit('No inline runtime script')
+          Path('/tmp/voidcut-runtime.js').write_text(max(scripts,key=len),encoding='utf-8')
+          PY
+          node --check /tmp/voidcut-runtime.js
+          node --check sw.js
+          node --check design/voidcut-design-system.js
+
+      - name: Validate leaderboard verifier and Worker
+        working-directory: leaderboard
+        run: |
+          npm install --no-audit --no-fund
+          npm run build:verifier
+          node --check src/generated-verifier.js
+          node --check src/index.js
+          npx wrangler deploy --dry-run --outdir /tmp/voidcut-worker-build
+
+      - name: Commit remediation and remove one-shot machinery
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f scripts/v9r-remediate.py .github/workflows/v9r-remediate.yml
+          git add index.html sw.js leaderboard/src/index.js leaderboard/src/generated-verifier.js .github/workflows/deploy-voidcut-leaderboard.yml scripts/release-validation.py scripts/browser-smoke.mjs .github/workflows/release-validation.yml
+          git commit -m "V9-R close release-candidate blockers"
+          git push origin HEAD:chatgpt/v9r-release-remediation
