@@ -9,6 +9,10 @@ async function assertVisible(page, selector, label) {
   if (!(await el.isVisible())) throw new Error(`${label} is not visible`);
 }
 
+function benignEngineConsoleMessage(name, text) {
+  return name === 'webkit' && text === 'Viewport argument key "interactive-widget" not recognized and ignored.';
+}
+
 for (const [name, engine] of engines) {
   const browser = await engine.launch({ headless: true });
   try {
@@ -16,7 +20,11 @@ for (const [name, engine] of engines) {
     const page = await context.newPage();
     const consoleErrors = [];
     page.on('pageerror', e => consoleErrors.push(`pageerror: ${e.message}`));
-    page.on('console', m => { if (m.type() === 'error') consoleErrors.push(`console: ${m.text()}`); });
+    page.on('console', m => {
+      if (m.type() !== 'error') return;
+      const text = m.text();
+      if (!benignEngineConsoleMessage(name, text)) consoleErrors.push(`console: ${text}`);
+    });
     await page.goto(base, { waitUntil: 'domcontentloaded' });
     await assertVisible(page, '#menu', `${name} menu`);
     await assertVisible(page, '#play', `${name} play button`);
